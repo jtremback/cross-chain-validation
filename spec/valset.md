@@ -15,7 +15,7 @@ by *M(dc)*.
 By *M(dc,i)* we denote the *i*th element. We use the notation
 - M(dc,i).valset, with M(dc,0).valset = InitialVS
 - M(dc,i).epoch
-
+- M(dc,0).epoch = 0
 
 #### [XCV-MC-INV-MODIFY-VALS.1]
 At all times, for all *i*, *M(dc,i).epoch = i*.
