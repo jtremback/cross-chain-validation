@@ -13,7 +13,7 @@ For each `dc`, there is at most one `CREATE_VALIDATOR_SET (dc, DCVS)` during the
 The sequence of calls `MODIFY_VALIDATOR_SET (dc, NEWVS,epoch)` is denoted 
 by *M(dc)*.  
 By *M(dc,i)* we denote the *i*th element. We use the notation
-- M(dc,i).valset, with M(dc,0) = InitialVS
+- M(dc,i).valset, with M(dc,0).valset = InitialVS
 - M(dc,i).epoch
 
 
@@ -56,4 +56,3 @@ For all times *t*, if *DC.EPOCH(t) < epoch(t)* then there is a time *t'>t* such 
 
 #### [XCV-DC-INV.1]
 For all times, *DC.VS = M(dc,DC.EPOCH).valset* 
-
