@@ -2,8 +2,8 @@
 
 ## Data Structures
 
-`ValSetUpdatePacket` is sent by the mother chain to the daughter chain to inform daughter chain about
-validator set changes.
+`ValSetUpdatePacket` is sent by the mother chain to the daughter chain to inform the daughter chain about
+the validator set changes.
 
 ```golang
 struct ValSetUpdatePacket {
@@ -62,7 +62,7 @@ func onChanOpenInit(
   counterpartyPortIdentifier: Identifier,
   counterpartyChannelIdentifier: Identifier,
   version: string) {
-  // only unordered channels allowed
+  // only ordered channels allowed
   abortTransactionUnless(order === ORDERED)
   // assert that version is "icsXXX"
   abortTransactionUnless(version === "icsXXX")
@@ -79,7 +79,7 @@ func onChanOpenTry(
   counterpartyChannelIdentifier: Identifier,
   version: string,
   counterpartyVersion: string) {
-  // only unordered channels allowed
+  // only ordered channels allowed
   abortTransactionUnless(order === ORDERED)
   // assert that version is "icsXXX"
   abortTransactionUnless(version === "icsXXX")
@@ -147,7 +147,7 @@ function onRecvPacket(packet: Packet) {
   // construct default acknowledgement of success
   ValSetUpdateAcknowledgement = ValSetUpdateAcknowledgement{true, null}
   // who manages validator sets in the SDK app and how we pass this info to Tendermint?
-  newValSet = data.valSet // how we pass this information to Tendermint?
+  newValSet = data.valSet // how do we pass this information to Tendermint?
   return ack
 }
 
@@ -177,13 +177,13 @@ function onTimeoutPacket(packet: Packet) {
 With a standalone chains, light client depends on the Tendermint security model
 that is parameterized with the duration of the UNBONDING_PERIOD. Each block defines
 a start of the UNBONDING_PERIOD for the new validtor set defined by the committed block.
-In case of cross chain validation, validator set change on the mother change takes is
-committed at some time t that is equal to block.Time where the block is the block at which
+In case of cross chain validation, a validator set change on the mother change is
+committed at some time t that is equal to block. Time where the block is the block at which
 validator set changes has taken place.
 
 Compared to the standalone chain, in the case of cross chain validation, the validator set change
 is not effective at the commit time. The important scenario to consider is the case where a validator
-unbonds its stake and want to get its stake from the system. In the single chain case, this action
+unbonds its stake and wants to get its stake from the system. In the single chain case, this action
 is blocked for a duration of the unbonding period. During this time frame, any detectable misbehavior
 is slashable. Trust in the validator set is shortened by introducing trusted period that is shorter than
 the unbonding period.
@@ -194,22 +194,21 @@ we should not start unbonding period before update is effective on the baby chai
 be implemented by delaying effective unbonding period before acknowledgment of the valset packet is
 received.
 
-The other problem is regarding light client evidence submission. The existing light client evidence submission
+The other problem is regarding the light client evidence submission. The existing light client evidence submission
 protocol assumes that entry point for the evidence is a correct full node that has access to a correct blockchain.
 Therefore, if we apply this model to the baby chain, light clients for the baby chain would be submitting
 attack evidences to the full nodes of the baby chain. Then evidence is handled and processed on the baby chain and
-the result (set of faulty processed and attack type) are sent to the mother chain over IBC channel. Note that
-this assumes that there is a IBC channel open between mother and daughter.
+the result (set of faulty processed and attack type) is sent to the mother chain over IBC channel. Note that
+this assumes that there is an IBC channel open between mother and daughter.
 
 Note: Is there a scenario in which IBC channel between mother chain and daughter chain is closed but
 mother chain and daughter chain continues to operate? For example, assume that light client at the daughter
 side of the IBC channel is in invalid state (either received evidence of misbehaviour or the latest header
-has expired). In that case channel will be closed and baby chain should most probably shut down and start
+has expired). In that case channel will be closed and baby chain should most probably shut down and start a
 manual recovery. But if UNBONDING_PERIOD is not over, there is still a possibility that validators trick
 light clients of the baby chain. In this case even if attack is detected there is no way to process and send
 misbehaving processes to the mother chain. We should analyse what are faulty scenarios in which channel
 can be closed and see how we can ensure light clients are still safe. Note that one interesting option
 to consider is light client of the baby chain being able to also track mother chain (run also light client for
-mother chain), but the issue in this case is the fact that mother chain does not understand attack evidences
+mother chain), but the issue in this case is the fact that the mother chain does not understand attack evidences
 of the baby chain.
-
