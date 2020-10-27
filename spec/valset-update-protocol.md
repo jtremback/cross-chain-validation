@@ -1,5 +1,11 @@
 # Technical Specification
 
+## State
+
+The mother chain should know what is the active validator set of the daughter chain.
+
+- 'daughterValidators'
+
 ## Data Structures
 
 `ValSetUpdatePacket` is sent by the mother chain to the daughter chain to inform the daughter chain about
@@ -144,9 +150,10 @@ func sendValSetUpdatePacket(
 ```typescript
 function onRecvPacket(packet: Packet) {
   ValSetUpdatePacket data = packet.data
+  // perform some checks?
   // construct default acknowledgement of success
   ValSetUpdateAcknowledgement = ValSetUpdateAcknowledgement{true, null}
-  // who manages validator sets in the SDK app and how we pass this info to Tendermint?
+  // who manages validator sets in the SDK app and how do we pass this info to Tendermint?
   newValSet = data.valSet // how do we pass this information to Tendermint?
   return ack
 }
@@ -156,10 +163,18 @@ function onRecvPacket(packet: Packet) {
 ```typescript
 function onAcknowledgePacket(
   packet: Packet,
-  acknowledgement: bytes) {
+  acknowledgement: bytes) {  
   // if the update failed (why it would failed?) close channel
   if (!ack.success)
     close channel // TODO: Figure out if this is the right action to do
+
+  // othwerise, start unbonding the validators that have left the active validator set of the daughter chain
+  ValSetUpdatePacket data = packet.data
+  startUnbonding(daughterValidators, data.valset)
+  // how do we start unbonding?
+
+  // update the active validator set of the daughter chain
+  daughterValidators = data.valset
 }
 ```
 
