@@ -68,7 +68,7 @@ val at the begin of epoch e (on the mother chain)
 
 Let unbonding-start(e) be the minimal time s.t. *DC.EPOCH >= e*
 
-The daughter chain maz issue a *Release(val,refund,e)*
+The daughter chain may issue a *Release(val,refund,e)*
 transaction.
 
 > *refund* tokens should be returned to the validator val due to
