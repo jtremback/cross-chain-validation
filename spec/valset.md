@@ -56,3 +56,43 @@ For all times *t*, if *DC.EPOCH(t) < epoch(t)* then there is a time *t'>t* such 
 
 #### [XCV-DC-INV.1]
 For all times, *DC.VS = M(dc,DC.EPOCH).valset* 
+
+
+## Cross-chain Bonding
+
+The mother chain maintains the validators whose unbonding has
+started but their funds are not freed yet: *amount = Frozen(val,e)*
+denotes that unbonding of *amount* tokens was started for validator
+val at the begin of epoch e (on the mother chain)
+
+
+Let unbonding-start(e) be the minimal time s.t. *DC.EPOCH >= e*
+
+The daughter chain maz issue a *Release(val,refund,e)*
+transaction.
+
+> *refund* tokens should be returned to the validator val due to
+> unbonding in epoch e
+
+#### [XCV-DC-UNB-UNIQUE-INV.1]
+For each e and val, *Release(val,refund,e)* is issued at most once.
+
+#### [XCV-DC-UNB-INV.1]
+*Release(val,refund,e)* is not issued before  unbonding-start(e) +
+UNBONDING_PERIOD.
+
+#### [XCV-DC-UNB-LIFE.1]
+*Release(val,refund,e)* is eventually issued
+
+#### [XCV-DC-REFUND-INV.1]
+If *Release(val,refund,e)* is issued, then *refund <= Frozen(val,e)*
+
+> if val misbehaved, we don't pay all back
+
+#### [XCV-XC-UNB-INV.1]
+amount is not reduced before *Release(val,refund,e)* is issued.
+
+#### [XCV-XC-UNB-LIFE.1]
+If *Release(val,refund,e)* is issued and "the channel stays open",
+then eventually *refund* should be paid back and *Frozen(val,e)*
+should be set to 0.
