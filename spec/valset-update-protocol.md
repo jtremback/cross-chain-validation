@@ -2,9 +2,11 @@
 
 ## State
 
-The mother chain should know what is the active validator set of the daughter chain.
+Validator set for a chain
+- 'validatorSet[chainId]'
 
-- 'daughterValidators'
+(Validator, ChainId) -> Public key
+- 'validatorPublicKey'
 
 ## Data Structures
 
@@ -21,6 +23,16 @@ struct ValSetUpdatePacket {
 struct ValSetUpdateAcknowledgement {
   success  boolean
   error    string
+}
+```
+
+`EvidencePacket` is sent by the daughter chain once an evidence of misbehaviour is collected or an unbonding period is over at the daughter chain.
+
+```golang
+struct EvidencePacket {
+  validator  Validator
+  // is one evidence enough?
+  evidence   Evidence[]
 }
 ```
 
@@ -145,17 +157,58 @@ func sendValSetUpdatePacket(
 }
 ```
 
+```golang
+func sendEvidencePacket(
+  validator: Validator,
+  evidence: Evidence[]) {
+
+  UnbondingEndedPacket data = UnbondingEndedPacket{validator, evidence}
+  handler.sendPacket(Packet{timeoutHeight, timeoutTimestamp, destPort, destChannel, sourcePort, sourceChannel, data}, getCapability("port"))
+}
+```
+
 `onRecvPacket` is called by the routing module when a packet addressed to this module has been received.
 
 ```typescript
 function onRecvPacket(packet: Packet) {
-  ValSetUpdatePacket data = packet.data
-  // perform some checks?
-  // construct default acknowledgement of success
-  ValSetUpdateAcknowledgement = ValSetUpdateAcknowledgement{true, null}
-  // who manages validator sets in the SDK app and how do we pass this info to Tendermint?
-  newValSet = data.valSet // how do we pass this information to Tendermint?
-  return ack
+  Type type = packet.type()
+
+  switch (type) {
+    // executed on the daughter chain
+    // validator set change demanded by the mother chain
+    case ValSetUpdatePacket:
+      ValSetUpdatePacket data = packet.data
+      // perform some checks?
+
+      // construct default acknowledgement of success
+      ValSetUpdateAcknowledgement = ValSetUpdateAcknowledgement{true, null}
+
+      // who manages validator sets in the SDK app and how do we pass this info to Tendermint?
+      newValSet = data.valSet // how do we pass this information to Tendermint?
+      return ack;
+      break;
+
+    // executed on the mother chain
+    // unbonding allowed by the daughter chain
+    case EvidencePacket:
+      Validator val = packet.data.validator
+
+      // check evidence
+      if (!checkEvidence(validator, evidence, validatorPublicKey(validator, daughterChainId))) {
+        return
+      }
+
+      // slash if there is an evidence
+      slashingModule.slash(val, packet.data.evidence)
+
+      // unbond
+      stakingModule.unbound(val)
+
+      // no acknowledgement needed?
+
+    default:
+      break;
+  }
 }
 
 `onAcknowledgePacket` is called by the routing module when a packet sent by this module has been acknowledged.
@@ -167,14 +220,6 @@ function onAcknowledgePacket(
   // if the update failed (why it would failed?) close channel
   if (!ack.success)
     close channel // TODO: Figure out if this is the right action to do
-
-  // othwerise, start unbonding the validators that have left the active validator set of the daughter chain
-  ValSetUpdatePacket data = packet.data
-  startUnbonding(daughterValidators, data.valset)
-  // how do we start unbonding?
-
-  // update the active validator set of the daughter chain
-  daughterValidators = data.valset
 }
 ```
 
@@ -184,6 +229,97 @@ not be received on the destination chain).
 ```typescript
 function onTimeoutPacket(packet: Packet) {
   // what we do on timeout? Does it make sense talking about retransmissions?
+}
+```
+
+### Transaction callbacks
+
+```typescript
+function onCreateValidatorSet(
+  chainId: ChainId,
+  valset: Validator[]) {
+  // check whether this is the first CreateValidatorSet transaction for the chain
+  if (createValidatorSetSeen(chainId)) {
+    return
+  }  
+
+  // update the validator set for a chain
+  validatorSet[chainId] = valset
+
+  // if this validator is in the validator set and its willing to participate,
+  // then issue the transaction confirming this
+  // question: What if a CreateValidatorSet tx is issued, but not all processes want to participate? It looks like this tx should not be considered
+  if (me in valset) {
+    issueTx("ConfirmInitialValidator", id, me, PK, stake)
+  }
+}
+```
+
+```typescript
+function onConfirmInitialValidator(
+  chainId: ChainId,
+  validator: Validator,
+  PK: PublicKey,
+  stake: Integer) {  
+  // stake the money
+  stakingModule.stakeForChain(chainId, validator, stake)
+
+  // associate validator with the public key
+  validatorPublicKey.set(validator, chainId, PK)
+
+  // if every validator from the initial set confirmed, create a genesis file
+  validatorsConfirmed.add(chainId, validator)
+  if (validatorsConfirmed[chainId] == validatorSet[chainId]) {
+    createGenesisFile(...)
+  }
+}
+```
+
+```typescript
+function onValidatorSetChanged(
+  valset: Validator[]) {
+  // there is a change in the validator set of the daughter chain
+  // start unbonding for validators that are not in the validator set anymore
+  stakingModule.unbond(validatorSet[thisChainId], valset)
+
+  // update the validator set
+  validatorSet[thisChainId] = valset
+}
+```
+
+```typescript
+function onEvidenceDiscovered(
+  validator: Validator,
+  evidence: Evidence) {
+  // check whether the validator finished unbonding
+  if (stakingModule.checkStatus(validator) == UNBONDED) {
+    return
+  }
+
+  // store the evidence
+  evidence[validator].append(evidence)
+
+  // jail the validator -> this leads to a change of the validator set on the daughter chain?
+  jailValidator(validator)
+
+  // inform the mother chain
+  sendEvidencePacket(validator, evidence[validator])
+
+  // ignore the unbondingFinishedEvent
+  unbondingFinishedEvent[validator] = true
+}
+```
+
+```typescript
+function onUnbondingFinished(
+  validator: Validator) {
+  // check whether the unbonding event should be ignored
+  if (unbondingFinishedEvent[validator]) {
+    return
+  }
+
+  // inform the mother chain that the unbonding is done
+  sendEvidencePacket(validator, null)
 }
 ```
 
