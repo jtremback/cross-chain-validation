@@ -235,9 +235,23 @@ function onTimeoutPacket(packet: Packet) {
 ### Transaction callbacks
 
 ```typescript
+// performed on the mother chain
 function onCreateValidatorSet(
   chainId: ChainId,
   valset: Validator[]) {
+  // do we assume that all chains can act as mother chains to all other chains?
+  // or it can act as mother to only a strict subset of all chains?
+
+  // check whether there exists a chain with the specified id
+  if (!chainExists(chainId)) {
+    return
+  }
+
+  // check whether all validators from the specified set are present on this (mother) chains
+  if (!allPresent(thisChainId, valset)) {
+    return
+  }
+
   // check whether this is the first CreateValidatorSet transaction for the chain
   if (createValidatorSetSeen(chainId)) {
     return
@@ -255,12 +269,41 @@ function onCreateValidatorSet(
 }
 ```
 
+`function onCreateValidatorSet(chainId: ChainId, valset: Validator[])`
+* Expected precondition
+  * there exists a chain with *chainId* Identifier
+  * all validators from *valset* are users of this (mother) chains
+  * no CreateValidatorSet transaction is processed before this one for the specified chains
+
+* Expected postcondition
+  * validator set for the specified chain is updated
+  * if the host process is in the new validator set for the specified chain, it issues ConfirmInitialValidator transaction with its stake and public key that will be used on the specified chain
+
+* Error condition
+  * if the precondition is violated
+
 ```typescript
+// performed on the mother chain
 function onConfirmInitialValidator(
   chainId: ChainId,
   validator: Validator,
   PK: PublicKey,
-  stake: Integer) {  
+  stake: Integer) {
+  // CreateValidatorSet processed before
+  if (!CreateValidatorSetSeen()) {
+    return
+  }
+
+  // validator specified in the CreateValidatorSet
+  if (!validatorSet[chainId].contains(validator)) {
+    return
+  }
+
+  // PK is a valid public key
+  if (!validPublicKey(PK)) {
+    return
+  }
+
   // stake the money
   stakingModule.stakeForChain(chainId, validator, stake)
 
@@ -275,7 +318,22 @@ function onConfirmInitialValidator(
 }
 ```
 
+`function onConfirmInitialValidator(chainId: ChainId, validator: Validator, PK: PublicKey, stake: Integer)`
+* Expected precondition
+  * CreateValidatorSet transaction for the chain with *chainId* identifier is already processed
+  * Validator *validator* is specified in the CreateValidatorSet transaction
+  * *PK* is a valid public key
+
+* Expected postcondition
+  * *stake* amount of money is staked for the validator *validator* and chain with *chainId* identifier
+  * public key *PK* is associated with the validator *validator* and chain with *chainId* identifier
+  * if the ConfirmInitialValidator is the last from the set of initial validators (specified by CreateValidatorSet transaction), then contribute to the genesis file
+
+* Error condition
+  * if the precondition is violated  
+
 ```typescript
+// performed on the daughter chain
 function onValidatorSetChanged(
   valset: Validator[]) {
   // there is a change in the validator set of the daughter chain
@@ -287,10 +345,27 @@ function onValidatorSetChanged(
 }
 ```
 
+`function onValidatorSetChanged(valset: Validator[])`
+* Expected precondition
+  * none
+
+* Expected postcondition
+  * the unbonding (on the *daughter* chain) is started for validators that were removed from the new validator set (i.e., *valset*)
+  * the validator set is updated
+
+* Error condition
+  * none
+
 ```typescript
+// performed on the daughter chain
 function onEvidenceDiscovered(
   validator: Validator,
   evidence: Evidence) {
+  // evidence is valid
+  if (!valid(evidence, validator)) {
+    return
+  }
+
   // check whether the validator finished unbonding
   if (stakingModule.checkStatus(validator) == UNBONDED) {
     return
@@ -310,7 +385,19 @@ function onEvidenceDiscovered(
 }
 ```
 
+`function onEvidenceDiscovered(validator: Validator, evidence: Evidence)`
+* Expected precondition
+  * evidence *evidence* is valid and associated with the validator *validator*
+
+* Expected postcondition
+  * if the validator *validator* is already unbonded, nothing happens
+  * if the validator *validator* is not unbonded, then collect the evidence *evidence*, jail the validator *validator*, send the evidence *evidence* to the mother chain and set to ignore the UnbondingFinishedEvent
+
+* Error condition
+  * if the precondition is violated
+
 ```typescript
+// performed on the daughter chain
 function onUnbondingFinished(
   validator: Validator) {
   // check whether the unbonding event should be ignored
@@ -322,6 +409,16 @@ function onUnbondingFinished(
   sendEvidencePacket(validator, null)
 }
 ```
+
+`function onUnbondingFinished(validator: Validator)`
+* Expected precondition
+  * none
+
+* Expected postcondition
+  * if UnbondingFinishedEvent is not ignored, then inform the mother chain that the unbonding for the validator *validator* is finished
+
+* Error condition
+  * none
 
 ## Light clients of the daughter chain
 
