@@ -84,6 +84,8 @@ UNBONDING_PERIOD.
 #### [XCV-DC-UNB-LIFE.1]
 *Release(val,refund,e)* is eventually issued
 
+> refund could be equal to 0. If this is the case, the meaning simply is that "unbonding on the daughter chain is over" but nothing should be paid back
+
 #### [XCV-DC-REFUND-INV.1]
 If *Release(val,refund,e)* is issued, then *refund <= Frozen(val,e)*
 
