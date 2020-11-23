@@ -8,6 +8,10 @@ Validator set for a chain
 (Validator, ChainId) -> Public key
 - 'validatorPublicKey'
 
+## Desired properties
+
+// TODO
+
 ## Data Structures
 
 `ValSetUpdatePacket` is sent by the mother chain to the daughter chain to inform the daughter chain about
@@ -26,15 +30,15 @@ struct ValSetUpdateAcknowledgement {
 }
 ```
 
-`EvidencePacket` is sent by the daughter chain once an evidence of misbehaviour is collected or an unbonding period is over at the daughter chain.
+`UnbondingTimeoutExpiredPacket` is sent by the daughter chain to the mother chain to inform the mother chain
+that the unbonding period for a specific validator has expired.
 
 ```golang
-struct EvidencePacket {
-  validator  Validator
-  // is one evidence enough?
-  evidence   Evidence[]
+struct UnbondingTimeoutExpiredPacket {
+  validator Validator
 }
 ```
+// TODO Check whether an acknowledgment is necessary
 
 ## Protocol
 
@@ -128,7 +132,7 @@ func onChanOpenConfirm(
 func onChanCloseInit(
   portIdentifier: Identifier,
   channelIdentifier: Identifier) {
-  // no action necessary
+  // the channel is closing, do we need to punish?
 }
 ```
 
@@ -136,7 +140,7 @@ func onChanCloseInit(
 func onChanCloseConfirm(
   portIdentifier: Identifier,
   channelIdentifier: Identifier) {
-  // no action necessary
+  // the channel is closed, do we need to punish?
 }
 ```
 
@@ -158,11 +162,10 @@ func sendValSetUpdatePacket(
 ```
 
 ```golang
-func sendEvidencePacket(
-  validator: Validator,
-  evidence: Evidence[]) {
+func sendUnbondingTimeoutExpiredPacket(
+  validator: Validator) {
 
-  UnbondingEndedPacket data = UnbondingEndedPacket{validator, evidence}
+  UnbondingTimeoutExpiredPacket data = UnbondingTimeoutExpiredPacket{validator}
   handler.sendPacket(Packet{timeoutHeight, timeoutTimestamp, destPort, destChannel, sourcePort, sourceChannel, data}, getCapability("port"))
 }
 ```
@@ -183,28 +186,23 @@ function onRecvPacket(packet: Packet) {
       // construct default acknowledgement of success
       ValSetUpdateAcknowledgement = ValSetUpdateAcknowledgement{true, null}
 
-      // who manages validator sets in the SDK app and how do we pass this info to Tendermint?
-      newValSet = data.valSet // how do we pass this information to Tendermint?
+      newValSet = data.valSet // this information is forwarded to Tendermint at the end of the block (response to the EndBlock method)
       return ack;
       break;
 
-    // executed on the mother chain
-    // unbonding allowed by the daughter chain
-    case EvidencePacket:
-      Validator val = packet.data.validator
+      // executed on the mother chain
+      // unbonding allowed by the daughter chain
+      case UnbondingTimeoutExpiredPacket:
+        Validator validator = packet.data.validator
+        // construct default acknowledgement of success?
 
-      // check evidence
-      if (!checkEvidence(validator, evidence, validatorPublicKey(validator, daughterChainId))) {
-        return
-      }
+        if (validEvidenceExists(validator)) {
+          slashingModule.slash(validator)
+        }
 
-      // slash if there is an evidence
-      slashingModule.slash(val, packet.data.evidence)
+        stakingModule.unbond(validator)
 
-      // unbond
-      stakingModule.unbound(val)
-
-      // no acknowledgement needed?
+        // no acknowledgment needed?
 
     default:
       break;
@@ -236,6 +234,7 @@ function onTimeoutPacket(packet: Packet) {
 
 ```typescript
 // performed on the mother chain
+// onCreateValidatorSet function = deliverTx(CreateValidatorSet)
 function onCreateValidatorSet(
   chainId: ChainId,
   valset: Validator[]) {
@@ -271,6 +270,7 @@ function onCreateValidatorSet(
 
 `function onCreateValidatorSet(chainId: ChainId, valset: Validator[])`
 * Expected precondition
+  * CreateValidatorSet transaction committed
   * there exists a chain with *chainId* Identifier
   * all validators from *valset* are users of this (mother) chains
   * no CreateValidatorSet transaction is processed before this one for the specified chains
@@ -284,6 +284,7 @@ function onCreateValidatorSet(
 
 ```typescript
 // performed on the mother chain
+// onConfirmInitialValidator function = deliverTx(ConfirmInitialValidator)
 function onConfirmInitialValidator(
   chainId: ChainId,
   validator: Validator,
@@ -320,7 +321,8 @@ function onConfirmInitialValidator(
 
 `function onConfirmInitialValidator(chainId: ChainId, validator: Validator, PK: PublicKey, stake: Integer)`
 * Expected precondition
-  * CreateValidatorSet transaction for the chain with *chainId* identifier is already processed
+  * ConfirmInitialValidator transaction committed
+  * CreateValidatorSet transaction for the chain with *chainId* identifier is already executed
   * Validator *validator* is specified in the CreateValidatorSet transaction
   * *PK* is a valid public key
 
@@ -334,6 +336,8 @@ function onConfirmInitialValidator(
 
 ```typescript
 // performed on the daughter chain
+// executed at the End-block
+// do we need to specify this explicitly since there should exist this logic already?
 function onValidatorSetChanged(
   valset: Validator[]) {
   // there is a change in the validator set of the daughter chain
@@ -347,7 +351,7 @@ function onValidatorSetChanged(
 
 `function onValidatorSetChanged(valset: Validator[])`
 * Expected precondition
-  * none
+  * validator set changed at the End-Block method
 
 * Expected postcondition
   * the unbonding (on the *daughter* chain) is started for validators that were removed from the new validator set (i.e., *valset*)
@@ -356,75 +360,38 @@ function onValidatorSetChanged(
 * Error condition
   * none
 
-```typescript
-// performed on the daughter chain
-function onEvidenceDiscovered(
-  validator: Validator,
-  evidence: Evidence) {
-  // evidence is valid
-  if (!valid(evidence, validator)) {
-    return
-  }
 
-  // check whether the validator finished unbonding
-  if (stakingModule.checkStatus(validator) == UNBONDED) {
-    return
-  }
-
-  // store the evidence
-  evidence[validator].append(evidence)
-
-  // jail the validator -> this leads to a change of the validator set on the daughter chain?
-  jailValidator(validator)
-
-  // inform the mother chain
-  sendEvidencePacket(validator, evidence[validator])
-
-  // ignore the unbondingFinishedEvent
-  unbondingFinishedEvent[validator] = true
-}
-```
-
-`function onEvidenceDiscovered(validator: Validator, evidence: Evidence)`
-* Expected precondition
-  * evidence *evidence* is valid and associated with the validator *validator*
-
-* Expected postcondition
-  * if the validator *validator* is already unbonded, nothing happens
-  * if the validator *validator* is not unbonded, then collect the evidence *evidence*, jail the validator *validator*, send the evidence *evidence* to the mother chain and set to ignore the UnbondingFinishedEvent
-
-* Error condition
-  * if the precondition is violated
-
-```typescript
-// performed on the daughter chain
-function onUnbondingFinished(
-  validator: Validator) {
-  // check whether the unbonding event should be ignored
-  if (unbondingFinishedEvent[validator]) {
-    return
-  }
-
-  // inform the mother chain that the unbonding is done
-  sendEvidencePacket(validator, null)
-}
-```
+Since the daughter chain could be censored, the evidence should not be sent via IBC, but solely by means of the light client.
+Hence, whenever a correct process executes BeginBlock method, it obtains a set of evidences.
+Then, the light client "picks up" these evidences and must ensure that they are eventually committed on the mother chain.
+\\ TODO discuss how to present this
 
 `function onUnbondingFinished(validator: Validator)`
 * Expected precondition
-  * none
+  * a block B with time T is committed and an unbonding for the validator started at time U, where T - U > 3 weeks
 
 * Expected postcondition
-  * if UnbondingFinishedEvent is not ignored, then inform the mother chain that the unbonding for the validator *validator* is finished
+  * Inform the mother chain that the unbonding for the validator *validator* is finished
 
 * Error condition
   * none
+
+## Remarks and discussion topics
+
+One of the problems is that IBC is not resistant to the censorship attacks.
+In other words, if a chain has more than N/3 faulty validators, an information might never be relayed between two chains.
+This is, usually, not a problem since faulty processes have an incentive to behave "properly" with respect to IBC (e.g., UnbondingTimeoutExpiredPacket is relayed to the mother chain since faulty processes want to collect their money).
+
+However, there might be some cases where this is not true.
+For example, manipulation of a validator set of a daughter chain by a mother chain could be problematic.
+Namely, the CHANGE_VALIDATOR_SET (issued by the mother chain) might never take place on a daughter chain.
+In this way, daughter chain achieves complete autonomy in manipulating its own validator set.
 
 ## Light clients of the daughter chain
 
 With a standalone chains, light client depends on the Tendermint security model
 that is parameterized with the duration of the UNBONDING_PERIOD. Each block defines
-a start of the UNBONDING_PERIOD for the new validtor set defined by the committed block.
+a start of the UNBONDING_PERIOD for the new validator set defined by the committed block.
 In case of cross chain validation, a validator set change on the mother change is
 committed at some time t that is equal to block. Time where the block is the block at which
 validator set changes has taken place.
