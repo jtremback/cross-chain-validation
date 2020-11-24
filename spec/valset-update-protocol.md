@@ -10,7 +10,18 @@ Validator set for a chain
 
 ## Desired properties
 
-// TODO
+- Main safety property: If an evidence of a misbehavior is "timely" committed on a mother chain, then the misbehaving validator is slashed.
+  "Committed on a mother chain" = evidence appears in a request of the BeginBlock method
+  "timely": Let T_unbond be a time when an unbonding of a validator V starts (at the daughter chain; EndBlock method).
+            Let T_evidence be a time when an evidence of misbehavior of V is discovered (at the daughter chain; BeginBlock method).
+            Let T_mc_evidence be a time when an evidence of misbehavior of V is committed on a mother chain (BeginBlock method).
+            Let T_timeout be a time when a mother chain "learns" that unbonding for V is over on the daughter chain.
+            Then, "timely" = T_mc_evidence < T_timeout.
+            Are T_unbond and T_evidence (and their relation with each other and other T's) important?
+
+ - Main liveness property: For each validator V, where unbonding period for V is over on the daughter chain, the mother chain eventually unbonds V.
+ Remark: The above liveness property seems like "the most important" liveness property. I guess we should discuss here about the daughter chain validators changes "initiated" by the mother chain.
+         If we want to have that, I guess we should introduce something like: If the mother chain "wants" to change the validator set of the daughter chain, the change eventually "happens".
 
 ## Data Structures
 
@@ -366,12 +377,25 @@ Hence, whenever a correct process executes BeginBlock method, it obtains a set o
 Then, the light client "picks up" these evidences and must ensure that they are eventually committed on the mother chain.
 \\ TODO discuss how to present this
 
+```typescript
+// performed on the daughter chain
+// executed at the BeginBlock with time T, where T - U > 3 weeks; U is time when the unbonding started
+function onUnbondingFinished(T: BftTime) {
+  // find validators that are done with the unbonding
+  validators = stakingModule.unbondingFinished(T)
+
+  // send the packet
+  for each v in validators:
+    sendUnbondingTimeoutExpiredPacket(v)
+}
+```
+
 `function onUnbondingFinished(validator: Validator)`
 * Expected precondition
   * a block B with time T is committed and an unbonding for the validator started at time U, where T - U > 3 weeks
 
 * Expected postcondition
-  * Inform the mother chain that the unbonding for the validator *validator* is finished
+  * Inform the mother chain that the unbonding for the validator *validator* is finished, i.e., UnbondingTimeoutExpiredPacket is sent to the mother chain via IBC
 
 * Error condition
   * none
