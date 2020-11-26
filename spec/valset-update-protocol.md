@@ -243,8 +243,9 @@ function onTimeoutPacket(packet: Packet) {
 
 ### Transaction callbacks
 
+#### Mother chain
+
 ```typescript
-// performed on the mother chain
 // onCreateValidatorSet function = deliverTx(CreateValidatorSet)
 function onCreateValidatorSet(
   chainId: ChainId,
@@ -294,7 +295,6 @@ function onCreateValidatorSet(
   * if the precondition is violated
 
 ```typescript
-// performed on the mother chain
 // onConfirmInitialValidator function = deliverTx(ConfirmInitialValidator)
 function onConfirmInitialValidator(
   chainId: ChainId,
@@ -345,8 +345,9 @@ function onConfirmInitialValidator(
 * Error condition
   * if the precondition is violated  
 
+#### Daughter chain
+
 ```typescript
-// performed on the daughter chain
 // executed at the End-block
 // do we need to specify this explicitly since there should exist this logic already?
 function onValidatorSetChanged(
@@ -378,7 +379,6 @@ Then, the light client "picks up" these evidences and must ensure that they are 
 \\ TODO discuss how to present this
 
 ```typescript
-// performed on the daughter chain
 // executed at the BeginBlock with time T, where T - U > 3 weeks; U is time when the unbonding started
 function onUnbondingFinished(T: BftTime) {
   // find validators that are done with the unbonding
