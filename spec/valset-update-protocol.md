@@ -345,6 +345,34 @@ function onConfirmInitialValidator(
 * Error condition
   * if the precondition is violated  
 
+  ```typescript
+  // onChangeValidatorSet function = deliverTx(ChangeValidatorSet)
+  function onChangeValidatorSet(
+    chainId: ChainId,
+    valset: Validator[]) {
+    // do we assume that all chains can act as mother chains to all other chains?
+    // or it can act as mother to only a strict subset of all chains?
+
+    // check whether there exists a chain with the specified id
+    if (!chainExists(chainId)) {
+      return
+    }
+
+    sendValSetUpdatePacket(chainId, valset)
+  }
+  ```
+
+  `function onChangeValidatorSet(chainId: ChainId, valset: Validator[])`
+  * Expected precondition
+    * ChangeValidatorSet transaction committed
+    * CreateValidatorSet transaction for the chain with *chainId* identifier is already executed
+
+  * Expected postcondition
+    * none
+
+  * Error condition
+    * if the precondition is violated  
+
 #### Daughter chain
 
 ```typescript
