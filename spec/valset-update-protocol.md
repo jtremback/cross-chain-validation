@@ -274,7 +274,7 @@ function onTimeoutPacket(packet: Packet) {
 - Expected precondition
   - The *packet* has timed out
 - Expected postcondition
-  - The *UnbondingOver* packet is create again
+  - The *UnbondingOver* packet is created again
 - Error condition
   - If the precondition is violated
 
