@@ -261,7 +261,7 @@ function onTimeoutPacket(packet: Packet) {
   seqNum = packet.seqNum
 
   // create the UnbondingOver packet
-  UnbondingOver data = UnbondingOver{packets, seqNum}
+  UnbondingOver data = UnbondingOver{packet, seqNum}
 
   // obtain the destination port of the baby blockchain
   destPort = getPort(parentChainId)
