@@ -83,9 +83,9 @@ We observe state transitions that are driven by an user, driven by the relayer a
 
 ## State Machine for a Single Validator Set Change demand
 
-When we say that there is a *single* validator set change demand, we assume that this demand will be a single committed validator set change demand in a block at the baby blockchain.
-If this is indeed the case, the validator set change indeed takes place at the baby blockchain.
-In other words, the validator set of the baby blockchain changes to the validator set from the demand.
+For simplicity in presentation, in this section we consider a *single* validator set change demand, that is, we assume that this demand will be a single committed validator set change demand in a block at the parent blockchain.
+(If the relayer successfully transmits the protocol packet) this demand will result the validator set change indeed taking place at the baby blockchain.
+However, in principle multiple demands can be issued before the first of those is finished. This leads to concurrency, and intermediate validator set changes are not visible in the validator sets of the baby chain. Note, that this does not influence the (un)staking logic. We will discuss concurrency effects below.
 
 We now present the state machine for this case.
 ![image](../images/data_flow.png)
