@@ -19,7 +19,7 @@ Recall that the parent blockchain has an ability to demand a change to the valid
 Moreover, we want to ensure the stake of validators of the baby blockchain are "frozen" at the parent chain.
 
 Hence, we aim to achieve the following properties:
-- *Liveness*: If the parent blockchain demands a change to the validator set of the baby chain to some set *V* of validators and the IBC communication successfully relays this demand to the baby blockchain, then the validator set of the baby blockchain is eventually set to *V* or to some set *V'*, such that the parent blockchain demanded a change to the validator set of the baby chain to *V'* **after** the demand for *V*.
+- *Liveness*: If the staking module of the parent blockchain demands a change to the validator set of the baby chain to some set *V* of validators and the IBC communication successfully relays this demand to the baby blockchain, then the validator set of the baby blockchain is eventually set to *V* or to some set *V'*, such that the parent blockchain demanded a change to the validator set of the baby chain to *V'* **after** the demand for *V*.
 - *Stake safety*: If a validator *v* belongs to a validator set of the baby blockchain, then the stake of *v* is frozen at the parent blockchain. Moreover, if the stake of *v* is unfrozen at the parent blockchain, the unbonding period has elapsed for *v* at the baby blockchain.
 - *Stake liveness*: If the stake of a validator *v* is bonded at the parent blockchain, eventually the stake will be unbonded (some stake might be slashed).
 
