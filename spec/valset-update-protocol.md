@@ -18,13 +18,12 @@ This subsection is devoted to defining properties that the Cross-Chain Validatio
 Recall that the parent blockchain has an ability to demand a change to the validator set of the baby chain.
 Moreover, we want to ensure the stake of validators of the baby blockchain are "frozen" at the parent chain.
 
-A change validator set demand is a tuple *(V, SN)*, where *V* represent a validator set and *SN* a sequence number of the demand.
+A change validator set demand is a tuple *(V, SN)*, where *V* represent a validator set updates and *SN* a sequence number of the demand.
 If a change validator set demand *(V', SN')* is issued after a validator set demand *(V, SN)* by the staking module of the parent blockchain, then *SN' > SN*.
 
 Hence, we aim to achieve the following properties:
-- *Liveness*: If the staking module of the parent blockchain demands a validator set change *(V, SN)* for the baby chain and this demand is successfully relayed to the baby blockchain, then the validator set of the baby blockchain is eventually set to *(V, SN* or to *(V', SN')*, where *SN' > SN*.
-- *Validator set change safety*: Suppose that the validator set of the baby blockchain is updated to a validator set *V* *n* times.
-Then, there exists a sequence *(V, SN(1)), (V, SN(2)), ..., (V, SN(n))* of change validator set demands issued by the staking module of the parent blockchain such that *SN(i) < SN(i+1)*.
+- *Liveness*: If the staking module of the parent blockchain demands a validator set change *(V, SN)* for the baby chain and this demand is successfully relayed to the baby blockchain, then the validator set of the baby blockchain reflects this demand.
+- *Validator set change safety*: Suppose that the validator set of the baby blockchain changes from *V* to *V'*. Then, there exists a sequence *seq = (V, SN(1)), (V, SN(2)), ..., (V, SN(n))*, where *n > 0*, of change validator set demands issued by the staking module of the parent blockchain such that *apply(V, seq) = V'*.
 - *Stake safety*: If a validator *v* belongs to a validator set of the baby blockchain, then the stake of *v* is frozen at the parent blockchain. Moreover, if the stake of *v* is unfrozen at the parent blockchain, the unbonding period has elapsed for *v* at the baby blockchain.
 - *Stake liveness*: If the stake of a validator *v* is bonded at the parent blockchain and the staking module of the parent blockchain demands a change to the validator set of the baby blockchain that does not contain *v*, eventually the stake of *v* is unbonded (although some stake might be slashed).
 
@@ -35,8 +34,7 @@ An IBC channel assumes two parties (the respective blockchains) involved in the 
 A relayer intermediates communication between the two blockchains. Each blockchain exposes an API comprising read, write, as well as a queue (FIFO) functionality. So there are two parts to the communication API:
 
 - a read/write store: The read/write store holds the entire state of the chain. Each module can write to this store.
-- a queue of datagrams (packets):
-Each module can pop datagrams stored in this queue and a relayer can push to this queue.
+- a queue of datagrams (packets): Each module can dequeue datagrams stored in this queue and a relayer can queue to this queue.
 
 ## Data Structures
 
@@ -53,7 +51,8 @@ We devote this section to defining the data structures used to represent the sta
 
 - Unbonding: Keeps track of validators that are currently unbonding.
 - Validator set: The validator set of the baby blockchain.
-- ValSet changes: Keeps track of all demands of the parent blockchain for a change of the validator set of the baby blockchain in a **current** block.
+- Sequence number: The sequence number of the **last** change validator set demand that influenced the current validator set of the baby blockchain.
+- ValSet changes: Keeps track of all demands of the parent blockchain for a change of the validator set of the baby blockchain in a current block.
 - Outcoming data store: "Part" of the blockchain used for storing the packets that should be relayed to the parent blockchain (same as at the parent blockchain).
 
 ### Packet data
@@ -61,13 +60,13 @@ We devote this section to defining the data structures used to represent the sta
 #### Sent by the parent blockchain
 
 - ChangeValidatorSet(validatorSet, seqNum): Packet sent by the parent blockchain to the baby blockchain to express the demand of the parent blockchain to modify the validator set of the baby blockchain.
-"New" validator set is defined in the *validatorSet* parameter, whereas the *seqNum* represents the unique identifier of the demand.
+Validator set modifications are defined in the *valSetUpdate* parameter, whereas the *seqNum* represents the unique identifier of the demand.
 
   *Remark:* There exists the acknowledgment packet for the ChangeValidatorSet packet. However, currently the acknowledgment packet does not influence any state transitions (as we introduce in the rest of the document).
 
 #### Sent by the baby blockchain
 
-- UnbondingOver(validatorSet, seqNum): Packet sent by the baby blockchain to signalize that the unbonding period has elapsed at the baby blockchain for every validator that is demanded in the *ChangeValidatorSet* packet with sequence number *seqNum*.
+- UnbondingOver(seqNums): Packet sent by the baby blockchain to signalize that the unbonding period has elapsed at the baby blockchain for every validator that is demanded in the *ChangeValidatorSet* packets with sequence numbers less than or equal to *seqNum*.
 
   *Remark:* There exists the acknowledgment packet for the UnbondingOver packet. However, currently the acknowledgment packet does not influence any state transitions (as we introduce in the rest of the document).
 
@@ -82,22 +81,22 @@ We observe state transitions that are driven by an user, driven by the relayer a
 
   - Transaction-driven state transitions: These are the state transitions that are driven by the relayer. Namely, these transitions are activated since communication between the two blockchains takes place. E.g., some packet is received via the IBC communication, a timeout has elapsed for a packet, acknowledgment for a packet is received.
 
-  - Time-driven state transitions: These transitions are activated since some time has elapsed. As we will present in the rest of the document, time-driven state transitions help us determine when the unbonding period, measured at the baby blockchain, has elapsed for a validator.
+  - Time-driven state transitions: These transitions are activated since some time has elapsed. As we will present in the rest of the document, time-driven state transitions help us determine when the unbonding period, measured at the baby blockchain, has elapsed for a validator set.
 
-  In the rest of the section, we will discuss the aforementioned state transitions in more detail.
+In the rest of the document, we will discuss the aforementioned state transitions in more detail.
 
 ## State Machine for a Single Validator Set Change demand
 
 For simplicity in presentation, in this section we consider a *single* validator set change demand, that is, we assume that this demand will be a single committed validator set change demand in a block at the parent blockchain.
 (If the relayer successfully transmits the protocol packet) this demand will result the validator set change indeed taking place at the baby blockchain.
-However, in principle multiple demands can be issued before the first of those is finished. This leads to concurrency, and intermediate validator set changes are not visible in the validator sets of the baby chain. Note, that this does not influence the (un)staking logic. We will discuss concurrency effects below.
+However, in principle multiple demands can be issued before the first of those is finished. This leads to concurrency, and intermediate validator set changes may not be visible in the validator sets of the baby chain. We will discuss concurrency effects below.
 
 We first describe the lifetime of a validator set change demand.
 First, the staking module of the parent blockchain issues this demand by initiating the sending of the packet to the baby blockchain.
 Once this packet is received by the baby blockchain, the validator set of the baby blockchain is updated to reflect the received packet and, from this point on, the "new" validator set is operating the baby blockchain.
 However, once the validator set of the baby blockchain is updated, the "old" validator set starts unbonding.
 Once the unbonding period for the validator set elapses, the *UnbondingOver* packet is sent to the parent blockchain.
-Lastly, when the *UnbondingOver* packet is received by the parent blockchain, the stake of the validators is unfrozen. 
+Lastly, when the *UnbondingOver* packet is received by the parent blockchain, the stake of the validators is unfrozen.
 
 We now present the state machine for this case.
 ![image](../images/data_flow.png)
@@ -109,8 +108,21 @@ We now present the state machine for this case.
 In this subsection we explain which functions we assume are provided by the staking module.
 
 ```golang
-// parent blockchain; used to unfreeze stake of validators associated with the change validator set demand (valSet, seqNum)
-func unfreezeStake(valSet, seqNum)
+// parent blockchain; used to unfreeze stake of validators associated with the change validator set demands (valSet, seqNum')
+// where seqNum' <= seqNum
+func unfreezeStake(seqNum)
+```
+
+- Expected precondition
+  - The change validator set demand *(valSet, seqNum)* issued by the staking module of the parent blockchain
+- Expected postcondition
+  - Stake of each validator from *valSet* associated with a sequence number *seqNum' <= seqNum* is unfrozen
+- Error condition
+  - If the precondition is violated
+
+```golang
+// parent blockchain; used to unfreeze stake of validators associated with the change validator set demands (valSet, seqNum)
+func unfreezeSingleStake(seqNum)
 ```
 
 - Expected precondition
@@ -122,7 +134,7 @@ func unfreezeStake(valSet, seqNum)
 
 ```golang
 // baby blockchain; notes that the unbonding for the specific change validator set demand started at time *time*
-func startUnbonding(valSet, seqNum, time)
+func startUnbonding(seqNum, time)
 ```
 
 - Expected precondition
@@ -143,9 +155,12 @@ func finishUnbonding(time)
 - Expected precondition
   - End-Block method is executed for the block with bft time equals to *time*
 - Expected postcondition
-  - Returns (and removes from the data structure) all validator set change demands *(V, SN)* such that *startUnbonding(V, SN, time')* is invoked, where *time - time' >= unbonding period*
+  - Returns (and removes from the data structure) all validator set change demands *(V, SN)* such that *startUnbonding(SN, time')* is invoked, where *time - time' >= unbonding period*
 - Error condition
   - If the precondition is violated
+
+We assume that the staking module of the baby chain takes care of a queue *validatorSetChangeQueue* which is used to store observed change validator set demands.
+This queue is manipulated using *sizeValidatorSetChangeQueue()* to retrieve the size of the queue, *dequeueValidatorSetChange()* and *queueValidatorSetChange(valSet, seqNum)* to dequeue and queue the *validatorSetChange* queue, respectively.
 
 ### Parent blockchain
 
@@ -157,10 +172,10 @@ This subsection will present the functions executed at the parent blockchain.
 // executed in the End-Block method; similarly to the "normal, single-blockchain" case
 func changeValidatorSet(
   babyChainId: ChainId
-  valSet: Validator[]
+  valSetUpdate: Validator[]
   seqNum: integer) {
   // create the ChangeValidatorSet packet
-  ChangeValidatorSet data = ChangeValidatorSet{valSet, seqNum}
+  ChangeValidatorSet data = ChangeValidatorSet{valSetUpdate, seqNum}
 
   // obtain the destination port of the baby blockchain
   destPort = getPort(babyChainId)
@@ -172,8 +187,8 @@ func changeValidatorSet(
 
 - Expected precondition
   - There exists a blockchain with *babyChainId* identifier
-  - All validators from *valSet* are validators at the parent blockchain
-  - Stake of each validator from *valSet* is frozen and associated with this demand (via *seqNum*)
+  - All validators from *valSetUpdate* are validators at the parent blockchain
+  - Stake of each validator from *valSetUpdate* is frozen and associated with this demand (via *seqNum*)
 - Expected postcondition
   - The packet containing information about this change validator set demand is created
 - Error condition
@@ -185,11 +200,10 @@ func onRecvPacket(packet: Packet) {
   // the packet is of UnbondingOver type
   assert(packet.type = UnbondingOver)
 
-  valSet = packet.valSet
-  seqNum = packet.seqNum
+  seqNum = packet.seqNums
 
-  // unfreeze stake of validators associated with this seqNum
-  stakingModule.unfreezeStake(valSet, seqNum)
+  // unfreeze stake of validators associated with sequence numbers <= seqNum
+  stakingModule.unfreezeStake(seqNum)
 
   // construct the default acknowledgment
   ack = defaultAck(UnbondingOver)
@@ -216,7 +230,7 @@ function onTimeoutPacket(packet: Packet) {
   seqNum = packet.seqNum
 
   // unfreeze stake of validators associated with this seqNum
-  stakingModule.unfreezeStake(valSet, seqNum)
+  stakingModule.unfreezeSingleStake(seqNum)
 }
 ```
 
@@ -235,11 +249,11 @@ func onRecvPacket(packet: Packet) {
   // the packet is of ChangeValidatorSet type
   assert(packet.type = ChangeValidatorSet)
 
-  valSet = packet.valSet
+  valSetUpdate = packet.valSetUpdate
   seqNum = packet.seqNum
 
   // inform the staking module of the new validator set change demand
-  stakingModule.queueValidatorSetChange(valSet, seqNum)
+  stakingModule.queueValidatorSetChange(valSetUpdate, seqNum)
 
   // construct the default acknowledgment
   ack = defaultAck(ChangeValidatorSet)
@@ -250,7 +264,7 @@ func onRecvPacket(packet: Packet) {
 - Expected precondition
   - The packet is of the *ChangeValidatorSet* type
 - Expected postcondition
-  - The staking module is queues the new validator set change demand
+  - The staking module queues the new validator set change demand
   - The default acknowledgment is created
 - Error condition
   - If the precondition is violated
@@ -264,16 +278,30 @@ func endBlock(block: Block) {
   // get the old validator set
   oldValSet, oldSeqNum = block.validatorSet
 
-  // start unbonding for the old validator set and all validators set specified in the current block, except for last
-  stakingModule.startUnbonding(oldValSet, oldSeqNum, time)
-  while (stakingModule.sizeValidatorSetChangeQueue() > 1) {
-    stakingModule.startUnbonding(stakingModule.dequeueValidatorSetChange(), time)
+  // get the new validator set; init to the old one
+  newValSet = oldValSet
+
+  // start unbonding for the old validator set represented by the validator set update
+  stakingModule.startUnbonding(oldSeqNum, time)
+
+  // update the validator set
+  while (stakingModule.sizeValidatorSetChangeQueue() > 0) {
+    valSetUpdate, valSetUpdateSeqNum = stakingModule.dequeueValidatorSetChange()
+
+    // update the new validator set
+    newValSet = applyValidatorUpdate(newValSet, valSetUpdate)
+
+    // remember which demands participate
+    if (stakingModule.sizeValidatorSetChangeQueue() = 0) {
+      newSeqNum = valSetUpdateSeqNum
+    }
   }
 
   // finish unbonding for mature validator sets
-  for each (valSet, seqNum in stakingModule.finishUnbonding(time)) {
+  // ordered increasingly
+  for each (seqNum in stakingModule.finishUnbondingOrdered(time)) {
     // create the UnbondingOver packet
-    UnbondingOver data = UnbondingOver{valSet, seqNum}
+    UnbondingOver data = UnbondingOver{seqNum}
 
     // obtain the destination port of the baby blockchain
     destPort = getPort(parentChainId)
@@ -282,7 +310,6 @@ func endBlock(block: Block) {
     handler.sendPacket(Packet{timeoutHeight, timeoutTimestamp, destPort, destChannel, sourcePort, sourceChannel, data}, getCapability("port"))
   }
 
-  newValSet, newSeqNum = stakingModule.dequeueValidatorSetChange()
   return newValSet, newSeqNum
 }
 ```
@@ -290,9 +317,9 @@ func endBlock(block: Block) {
 - Expected precondition
   - Every transaction from the *block* is executed
 - Expected postcondition
-  - Unbonding starts for the old validator set, as well as all validators set from the changes committed on the *block*, except for the last
+  - Unbonding starts for the old validator set
   - Unbonding finishes for all validator set that started unbonding more than *unbondingTime* before *time = block.time*. Moreover, the *UnbondingOver* packet is created for each such validator set
-  - The new validator set *valSet* is pushed to the Tendermint protocol and *valSet* belongs to the last validator set change demand committed on the *block*
+  - The new validator set *newValSet* is pushed to the Tendermint protocol and *newValSet* reflects all the change validator set demands from the *block*
 - Error condition
   - If the precondition is violated
 
@@ -304,11 +331,10 @@ function onTimeoutPacket(packet: Packet) {
   // the packet is of UbondingOver type
   assert(packet.type = UnbondingOver)
 
-  valSet = packet.valSet
   seqNum = packet.seqNum
 
   // create the UnbondingOver packet
-  UnbondingOver data = UnbondingOver{packet, seqNum}
+  UnbondingOver data = UnbondingOver{seqNum}
 
   // obtain the destination port of the baby blockchain
   destPort = getPort(parentChainId)
@@ -430,11 +456,11 @@ func onChanCloseConfirm(
 
 ## State Machine for Multiple Validator Set Change demands
 
-Note that "multiple" signalizes that more than one demand of the change validator set demand is committed in a block at the baby blockchain.
-If that happens, only the last demand takes place, i.e., only the validator set specified in the last demand becomes the validator set of the baby blockchain.
+Note that "multiple" signalizes that more than one demand of the change validator set type is committed in a block at the baby blockchain.
+If that happens, all updates take place.
+Note that some updates might not be visible, i.e., their effect might be hidden by subsequent demands.
 
-The only difference from the "single" validator set change case is that the unbonding should start for "ignored" validator set changes.
-The image below illustrates this.
+The image below illustrates this case.
 ![image](../images/data_flow_2.png)
 
 
@@ -444,21 +470,21 @@ Here we provide correctness arguments for the liveness, stake safety and stake l
 
 ### Liveness
 Suppose that the IBC communication indeed successfully relays the demand *ChangeValidatorSet(V, SN)* to the baby blockchain.
-Therefore, either the validator set of the baby blockchain is set to *V* (if the *ChangeValidatorSet(V, SN)* is the only or the last demand of this type in a block at the baby blockchain) or the validator set is changed to some set *V'*.
-If the first scenario occurs, the property is satisfied.
+Therefore, the validator set of the baby blockchain should reflect this demand.
+This indeed happens at the end of a block, since every observed demand is applied in order for the baby blockchain to calculate the new validator set.
+Hence, the property is satisfied.
 
-In order for the property to be satisfied even if the second scenario occurs, we must show that *ChangeValidatorSet(V', SN')* is demanded after *ChangeValidatorSet(V, SN)*.
-We conclude that *ChangeValidatorSet(V', SN')* is the last demand of this type in a block.
-Moreover, we know that *ChangeValidatorSet(V, SN)* is also in the same block.
-Since the IBC communication is ordered, we conclude that indeed *ChangeValidatorSet(V', SN')* is demanded after *ChangeValidatorSet(V, SN)*.
-Therefore, the property is satisfied.
+### Validator set change safety
+Suppose that the validator set of the baby blockchain changes from *V* to *V'* in two consecutive blocks.
+By construction of the protocol, we conclude that there exists a sequence of change validator set demands issued by the parent blockchain that result in *V'* when applied to *V*.
+Recursively, we conclude that this holds for any two validator sets (irrespectively of the "block distance" between them).
 
 ### Stake safety
 
 If the validator *v* belong to the validator set of the baby blockchain, we know that a *ChangeValidatorSet(V, SN)* is demanded by the parent blockchain, where *v in V*.
 Since the stake is frozen at the moment of sending this demand, the first statement of the property is satisfied.
 
-A stake of a validator *v* is unfrozen at the parent blockchain upon a receiption of the *UnbondingOver* packet.
+A stake of a validator *v* is unfrozen at the parent blockchain upon a reception of the *UnbondingOver* packet.
 Since this packet is sent by the baby blockchain only after the unbonding period has elapsed, the second claim of the property holds.
 
 ### Stake liveness
