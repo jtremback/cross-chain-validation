@@ -113,6 +113,8 @@ In this subsection we explain which functions we assume are provided by the stak
 func unfreezeStake(seqNum)
 ```
 
+- Implementation remark
+    - This callback is used to signal the to user (the staking module) that it can unfreeze stake because the unbonding period expired on the baby chain. It is in the responsibility of the staking module to check how much should be unfrozen depending on what evidence was received (by other means than this protocol) before.
 - Expected precondition
   - The change validator set demand *(valSet, seqNum)* issued by the staking module of the parent blockchain
 - Expected postcondition
