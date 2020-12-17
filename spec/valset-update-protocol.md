@@ -161,7 +161,7 @@ func finishUnbonding(time)
 - Error condition
   - If the precondition is violated
 
-We assume that the staking module of the baby chain takes care of a queue *validatorSetChangeQueue* which is used to store observed change validator set demands.
+**Remark.** The staking module of the baby chain needs to take care of a queue *validatorSetChangeQueue* which is used to store observed change validator set demands.
 This queue is manipulated using *sizeValidatorSetChangeQueue()* to retrieve the size of the queue, *dequeueValidatorSetChange()* and *queueValidatorSetChange(valSet, seqNum)* to dequeue and queue the *validatorSetChange* queue, respectively.
 
 ### Parent blockchain
