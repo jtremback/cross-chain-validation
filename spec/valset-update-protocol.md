@@ -463,7 +463,7 @@ If that happens, all updates take place.
 Note that some updates might not be visible, i.e., their effect might be hidden by subsequent demands.
 
 The image below illustrates this case.
-![image](./data_flow_2.png)
+![image](./data_flow_2.PNG)
 
 
 ## Correctness Arguments
