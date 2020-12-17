@@ -74,7 +74,7 @@ Validator set modifications are defined in the *valSetUpdate* parameter, whereas
 ## Transitions
 
 In this section, we informally discuss the state transitions that occur in our protocol.
-We observe state transitions that are driven by an user, driven by the relayer and driven by elapsed time.
+We observe state transitions that are driven by a user (i.e., the new staking module on the parent chain), driven by the relayer and driven by elapsed time.
 
   - User-driven state transitions: These transitions "start" the entire process of changing the validator set of the baby blockchain.
   We assume that the staking module expresses the will to change the validator set of the baby blockchain. It is done at the End-Block method (as in the "single blockchain" scenario).
