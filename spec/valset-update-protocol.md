@@ -99,7 +99,7 @@ Once the unbonding period for the validator set elapses, the *UnbondingOver* pac
 Lastly, when the *UnbondingOver* packet is received by the parent blockchain, the stake of the validators is unfrozen.
 
 We now present the state machine for this case.
-![image](./data_flow.png)
+![image](./data_flow.PNG)
 
 ## Function Definitions
 
