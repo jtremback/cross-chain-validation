@@ -7,7 +7,7 @@ Recall that the main goal of the Cross-Chain Validation protocol is to allow a n
 In other words, validators that are responsible for securing the parent blockchain "lend" their services to the baby blockchain.
 Importantly, the increased security of the baby blockchain is a consequence of the fact that misbehaviors of its (baby blockchain's) validators are penalised on the parent blockchain (which is highly secure by the assumption, i.e., significant amount of tokens are bonded on the parent blockchain).
 
-For the aforementioned concept to work, the **evidence handling** subprotocol should be designed.
+For the aforementioned concept to work and reinforce, the **evidence handling** subprotocol should be designed.
 Namely, an evidence of each misbehavior discovered on the baby blockchain should be "transferred" and verified on the parent blockchain.
 This document is devoted to discussing the evidence handling subprotocol of the Cross-Chain Validation protocol.
 
