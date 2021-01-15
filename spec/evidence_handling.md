@@ -4,7 +4,7 @@
 
 This document discusses the evidence handling in the **Cross-Chain Validation** protocol.
 Recall that the main goal of the Cross-Chain Validation protocol is to allow a new blockchain (baby blockchain) to be secured by some existing and *highly secure* blockchain (parent blockchain).
-In other words, validators that are responsible for securing the parent blockchain "borrow" their services to the baby blockchain.
+In other words, validators that are responsible for securing the parent blockchain "lend" their services to the baby blockchain.
 Importantly, the increased security of the baby blockchain is a consequence of the fact that misbehaviors of its (baby blockchain's) validators are penalised on the parent blockchain (which is highly secure by the assumption, i.e., significant amount of tokens are bonded on the parent blockchain).
 
 For the aforementioned concept to work, the **evidence handling** subprotocol should be designed.
