@@ -27,7 +27,7 @@ This subsection provides an informal description of the evidence handling subpro
 We start by introducing an assumption about evidence verification and computability.
 
 Assumption: Let *e* represent an evidence of misbehavior of a set *X* of faulty validators of the baby blockchain.
-Every correct full node of the parent blockchain verifies that *e* is a valid evidence of the misbehavior of a validator *v in X*, for every *v in X*.\
+Every correct full node of the parent blockchain verifies that *e* is a valid evidence of the misbehavior of a validator *v in X*, for every *v in X*.
 The aforementioned assumption simply states that evidence could be correctly verified on the parent blockchain.
 
 We now introduce entities that play a role in the evidence handling subprotocol.
@@ -63,7 +63,8 @@ Moreover, time that takes a transaction to be committed on a blockchain is unbou
 Recall that a validator could be slashed only within the *unbonding period*.
 Because of the unbounded communication delays and "commit" times, it is impossible to guarantee that the evidence will be committed on the parent blockchain **before** the unbonding period expires.
 
-We define the following times:
+
+We define the following times (times are defined with respect to the baby blockchain; moreover, global time is defined as a bfttime of the last block produced by the baby blockchain):
 - Latest time of detection: *D* (this time represents a *trusting period*)
 - Maximum evidence transfer delay from a light client to a full node of the parent blockchain: *T*
 - Maximum evidence submit time on the parent blockchain: *S*
@@ -73,6 +74,9 @@ Now, we define when the evidence handling subprotocol is guaranteed to operate s
 
 Let some misbehaving validator *v* leave the validator set of the baby blockchain at some time *t*.
 Validator *v* gets slashed at the parent blockchain if and only if *D + T + S + C <= unbonding period*.
+
+Note that *D* (*trusting period*) and *unbonding period* are parameters of the baby blockchain.
+Moreover, *D << unbonding period* so that the aforementioned equation is indeed satisfied even when other actions take long.
 
 The evidence handling subprotocol operates successfully only if *D + T +S + C <= unbonding period*.
 Namely, only if all of the aforementioned actions are executed "fast enough", a misbehaving validator will indeed be slashed.
