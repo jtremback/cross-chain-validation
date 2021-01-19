@@ -40,7 +40,7 @@ Namely, a light client verifies block headers, given a trusted block header.
 The verification of block headers is done using the skipping verification concept.
 
 With respect to the evidence handling subprotocol, a light client of the baby blockchain is capable of collecting an evidence of misbehavior of faulty validators of the baby blockchain.
-Moreover, the light client is able to send the aforementioned evidence to full nodes of the parent blockchain.
+Moreover, the light client is able to send the aforementioned evidence to full nodes of the baby blockchain, which then forward the evidence to full nodes of the parent blockchain.
 Importantly, we assume that light client is able to communicate (i.e., send evidence to) at least one *correct* full node.
 
 ### Full Node
@@ -48,8 +48,8 @@ Importantly, we assume that light client is able to communicate (i.e., send evid
 Full nodes execute transactions submitted to a blockchain.
 Similarly to light clients, they also verify results of transactions.
 
-In our context, a full node receives an evidence of misbehavior from a light client.
-Then, the full node is responsible for ensuring that the evidence eventually becomes committed on the parent blockchain.
+In our context, a full node (of the baby blockchain) receives an evidence of misbehavior from a light client.
+Then, the evidence is transferred to a full node of the parent blockchain which is responsible for ensuring that the evidence eventually becomes committed on the parent blockchain.
 
 ### The subprotocol
 
@@ -66,19 +66,20 @@ Because of the unbounded communication delays and "commit" times, it is impossib
 
 We define the following times (times are defined with respect to the baby blockchain; moreover, global time is defined as a bfttime of the last block produced by the baby blockchain):
 - Latest time of detection: *D* (this time represents a *trusting period*)
-- Maximum evidence transfer delay from a light client to a full node of the parent blockchain: *T*
+- Maximum evidence transfer delay from a light client to a full node of the baby blockchain: *T1*
+- Maximum evidence transfer delay from a full node of the baby blockchain to a full node of the parent blockchain: *T2*
 - Maximum evidence submit time on the parent blockchain: *S*
 - Maximum evidence commit time on the parent blockchain: *C*
 
 Now, we define when the evidence handling subprotocol is guaranteed to operate successfully, i.e., when a misbehaving validator of the baby blockchain indeed gets slashed:
 
 Let some misbehaving validator *v* leave the validator set of the baby blockchain at some time *t*.
-Validator *v* gets slashed at the parent blockchain if and only if *D + T + S + C <= unbonding period*.
+Validator *v* gets slashed at the parent blockchain if and only if *D + T1 + T2 + S + C <= unbonding period*.
 
 Note that *D* (*trusting period*) and *unbonding period* are parameters of the baby blockchain.
 Moreover, *D << unbonding period* so that the aforementioned equation is indeed satisfied even when other actions take long.
 
-The evidence handling subprotocol operates successfully only if *D + T +S + C <= unbonding period*.
+The evidence handling subprotocol operates successfully only if *D + T1 + T2 + S + C <= unbonding period*.
 Namely, only if all of the aforementioned actions are executed "fast enough", a misbehaving validator will indeed be slashed.
 Note here that we assume that time needed for a packet to be transferred from the baby to the parent blockchain is negligible.
-If we assume that the time is not negligible, i.e., this transfer takes at least *X* time, we reach the following equation: *D + T + S +C <= unbonding period + X*.
+If we assume that the time is not negligible, i.e., this transfer takes at least *X* time, we reach the following equation: *D + T2 + T2 + S + C <= unbonding period + X*.
