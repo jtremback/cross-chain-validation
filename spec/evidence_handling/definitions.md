@@ -47,11 +47,8 @@ Lastly, the full node is capable of transferring its deduction to full nodes of 
 #### Discussion
 
 This subsection discusses guarantees provided by the evidence handling subprotocol.
-Namely, the communication between a light client and a full node is not timely.
-Moreover, time that takes a transaction to be committed on a blockchain is unbounded.
 Recall that a validator could be slashed only within the *unbonding period*.
-Because of the unbounded communication delays and "commit" times, it is impossible to guarantee that the evidence will be committed on the parent blockchain **before** the unbonding period expires.
-
+Since the unbonding period is fixed, we need to add synchrony assumptions in order for a misbehaving validator to indeed be punished.
 
 We define the following times (times are defined with respect to the baby blockchain; moreover, global time is defined as a bfttime of the last block produced by the baby blockchain):
 - Latest time of detection: *D* (this time represents a *trusting period*)
