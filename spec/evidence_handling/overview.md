@@ -34,6 +34,8 @@ We analyze two scenarios:
 We first illustrate the light client attack scenario.
 Then, we do the same for the second scenario.
 
+TODO: modify the document once evidence verification on the parent blockchain is properly discussed.
+
 ### Light Client Attack Scenario
 
 ![image](../images/evidence_handling.PNG)
