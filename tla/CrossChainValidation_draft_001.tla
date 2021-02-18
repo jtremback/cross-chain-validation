@@ -20,14 +20,14 @@ VARIABLES \* parent variables
           babySeqNum, \* sequence number of the last change validator set demand, Int
           babyUnbonding, \* set of sequence numbers identifying validator sets that are currently unbonding, {Int}
           babyValSetChanges, \* set of sequence numbers of validator set change demands, {Int}
-          babyLastUnbondedSeqNum, \* sequence number of the last validator set that unbonded on the baby blockchain
+          babyLastUnbondedSeqNum, \* sequence number of the last validator set that unbonded on the baby blockchain, Int
           \* shared variables
           packetCommitments, \* a set of packet commitments for each chain, [Chains -> Packets]
-          haltProtocol, \* a flag that stores whether the protocol halted due to a timeout and closure of ordered channels
+          haltProtocol, \* a flag that stores whether the protocol halted due to a timeout and closure of ordered channels, BOOL
           \* events simulating a relayer
-          parentPendingEvents, \* pending events of the parent blockchain
-          babyPendingEvents, \* pending events of the baby blockchain
-          upcomingEvent \* current event to be processed
+          parentPendingEvents, \* pending events of the parent blockchain, Seq(Events)
+          babyPendingEvents, \* pending events of the baby blockchain, Seq(Events)
+          upcomingEvent \* current event to be processed, Events
           
 
 (*************************** Definitions **************************)
