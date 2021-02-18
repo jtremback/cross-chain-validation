@@ -10,20 +10,25 @@ CONSTANTS ChannelIDs, \* set of channelIDs
           ValidatorSetSequence \* sequence of length MaxChangeValidatorSeqNum, 
                                \* storing validator sets for each sequence number
 
-VARIABLES nextParentSeqNum, \* a sequence number of the next set of parent validators 
+VARIABLES \* parent variables
+          parentNextSeqNum, \* a sequence number of the next set of parent validators 
                             \* to be processed as validators of the baby, Int 
-          unfrozenSeqNums, \* set of sequence numbers identifying validator sets 
-                           \* whose stake is unfrozen, {Int}
+          parentUnfrozenSeqNums, \* set of sequence numbers, which are smaller than parentNextSeqNum,
+                                 \* identifying validator sets whose stake is unfrozen, {Int}
+          \* baby variables
+          babyValidatorSet, \* validator set of the baby blockchain, ValidatorIDs
+          babySeqNum, \* sequence number of the last change validator set demand, Int
+          babyUnbonding, \* set of sequence numbers identifying validator sets that are currently unbonding, {Int}
+          babyValSetChanges, \* set of sequence numbers of validator set change demands, {Int}
+          babyLastUnbondedSeqNum, \* sequence number of the last validator set that unbonded on the baby blockchain
+          \* shared variables
           packetCommitments, \* a set of packet commitments for each chain, [Chains -> Packets]
-        \* TODO: do we need to care about receipts, acknowledgements in chain store?
-        \*   packetReceipts, \* a set of packet receipts for each chain, [Chains -> Packets]
-        \*   packetAcknowledgements, \* a set of packet acknowledgements for each chain, [Chains -> Packets]
-          babyUnbonding, \* set of sequence numbers identifying validator sets that are currently unbonding
-          babyValidatorSet, \* validator set of the baby blockchain
-          babySeqNum, \* sequence number of the last change validator set demand
-          babyValSetChanges, \* set of validator set change demands, {Validators \X SeqNums}
-          pendingEvents, 
-          upcomingEvent
+          haltProtocol, \* a flag that stores whether the protocol halted due to a timeout and closure of ordered channels
+          \* events simulating a relayer
+          parentPendingEvents, \* pending events of the parent blockchain
+          babyPendingEvents, \* pending events of the baby blockchain
+          upcomingEvent \* current event to be processed
+          
 
 (*************************** Definitions **************************)
 SeqNums == 1 .. MaxChangeValidatorSeqNum
@@ -33,6 +38,11 @@ AllValidators == ValidatorIDs
 NullChainID == "none"
 NullEvent == "none"
 
+vars == <<parentNextSeqNum, parentUnfrozenSeqNums,
+          babyUnbonding, babyValidatorSet, babySeqNum, babyValSetChanges, babyLastUnbondedSeqNum,
+          packetCommitments, haltProtocol,
+          parentPendingEvents, babyPendingEvents, upcomingEvent>>
+
 Max(S) == CHOOSE x \in S : \A y \in S : x >= y 
 
 CrossChainValidationPacketData == [
@@ -41,7 +51,7 @@ CrossChainValidationPacketData == [
     seqNum : SeqNums
 ] \union [
     type : {"UnbondingOver"},
-    seqNums : SUBSET (SeqNums)
+    seqNum : SeqNums
 ]
 
 Packets == [
@@ -50,32 +60,18 @@ Packets == [
     data : CrossChainValidationPacketData
 ]          
 
-StakingModuleFunctions ==
-    {"FreezeStake", "UnfreezeStake", "UnfreezeSingleStake", "StartUnbonding", "FinishUnbonding"}
-
-ParentFunctions ==
-    {"ChangeValidatorSet", "OnRecvPacket", "OnTimeoutPacket"}
-        
-BabyFunctions ==
-    {"EndBlock", "OnRecvPacket", "OnTimeoutPacket"}
-
 Functions == 
-    StakingModuleFunctions \union ParentFunctions \union BabyFunctions
-
+    {"ChangeValidatorSet", "OnRecvPacket"} 
+    (*
+        Uncomment if packet acknowledgements are added.
+        \union {"OnPacketAck"}
+    *)
+        
 Events == [
     packet : Packets,
     function : Functions,
     chain : ChainIDs
 ]
-
-InitialStakingModuleEvents == {
-    [
-        function |-> "FreezeStake",
-        chain |-> "parent",
-        valSet |-> ValidatorSetSequence[seq],
-        seqNum |-> seq 
-    ] : seq \in SeqNums
-}
     
 (**************************** Operators ***************************)
     
@@ -104,28 +100,35 @@ CreateChangeValSetPacket(chain, valSet, seqNum) ==
     ] IN
 
     \* add ChangeValidatorSet event for parent chain
-    pendingEvents' = pendingEvents \union {event}
+    parentPendingEvents' = Append(parentPendingEvents, event)
 
-CreateAndSendUnbondingOverPackets(chain, seqNums) ==
+(*
+    English spec note: Here we create an UnbondingOver packet for a 
+    single (most) mature sequence number on the baby chain.
+    This should be enough to unfreeze the stake of all 
+    validators at the parent chain, which were part of validator
+    set changes with smaller or equal sequence numbers.
+*)
+CreateAndSendUnbondingOverPackets(chain, seqNum) ==
     LET packetData == [
-        type : {"UnbondingOver"},
-        seqNum : seqNums
+        type |-> "UnbondingOver",
+        seqNum |-> seqNum
     ] IN 
-    LET packets == [
-        srcChannel : {"babyChannel"},
-        dstChannel : {"parentChannel"},
-        data : packetData
+    LET packet == [
+        srcChannel |-> "babyChannel",
+        dstChannel |-> "parentChannel",
+        data |-> packetData
     ] IN 
-    LET events == [
-        packet : packets,
-        function : {"OnPacketRecv"},
-        chain : {"parent"}
+    LET event == [
+        packet |-> packet,
+        function |-> "OnPacketRecv",
+        chain |-> "parent"
     ] IN
 
     \* send packet
-    /\ packetCommitments' = [packetCommitments EXCEPT ![chain] = @ \union packets]
-    \* add OnPacketRecv events for receiver chain
-    /\ pendingEvents' = pendingEvents \union events
+    /\ packetCommitments' = [packetCommitments EXCEPT ![chain] = @ \union {packet}]
+    \* add OnPacketRecv event for parent chain
+    /\ parentPendingEvents' = Append(parentPendingEvents, event)
 
 SendChangeValSetPacket(chain, packet) ==
     LET event == [
@@ -136,34 +139,59 @@ SendChangeValSetPacket(chain, packet) ==
 
     \* send packet
     /\ packetCommitments' = [packetCommitments EXCEPT ![chain] = @ \union {packet}]
-    \* add OnPacketRecv event for receiver chain
-    /\ pendingEvents' = pendingEvents \union {event} 
+    \* add OnPacketRecv event for baby chain
+    /\ babyPendingEvents' = Append(babyPendingEvents, event)
 
 (* Staking module *)
 UnfreezeStake(chain, seqNum) ==
     /\ chain = "parent"
-    /\ unfrozenSeqNums' = unfrozenSeqNums \union 1..seqNum
+    /\ parentUnfrozenSeqNums' = parentUnfrozenSeqNums \union 1..seqNum
     
 UnfreezeSingleStake(chain, seqNum) ==
     /\ chain = "parent"
-    /\ unfrozenSeqNums' = unfrozenSeqNums \union {seqNum}
+    /\ parentUnfrozenSeqNums' = parentUnfrozenSeqNums \union {seqNum}
     
-StartAndFinishUnbonding(newSeqNum, oldSeqNums) ==
+StartUnbonding(newSeqNum) == 
     \* the sequence number of the baby blockchain is < newSeqNum
-    /\ babySeqNum < newSeqNum
+    \/ /\ babySeqNum < newSeqNum
+       \* add babySeqNum to babyUnbonding
+       /\ babyUnbonding' = babyUnbonding \union {babySeqNum}
+    \/ UNCHANGED babyUnbonding \* TODO
+
+FinishUnbonding(matureSeqNum) ==
     \* the sequence numbers for which unbonding is finishing have been unbonding
-    /\ oldSeqNums \subseteq babyUnbonding
-    \* remove oldSeqNums from unbonding, add babySeqNum
-    /\ babyUnbonding' = (babyUnbonding \ oldSeqNums) \union {babySeqNum}
-    /\ CreateAndSendUnbondingOverPackets("baby", oldSeqNums)
+    \/ /\ matureSeqNum \in babyUnbonding
+       \* send UnbondingOverPackets
+       /\ CreateAndSendUnbondingOverPackets("baby", matureSeqNum)
+       /\ babyLastUnbondedSeqNum' = matureSeqNum
+    \/ UNCHANGED babyLastUnbondedSeqNum \* TODO 
 
 
 AddValidatorSetChange(chain, packet) ==
     /\ chain = "baby"
-    /\ babyValSetChanges' = babyValSetChanges \union
-                                {<<packet.data.validatorSet, packet.data.seqNum>>}
+    /\ babyValSetChanges' = babyValSetChanges \union {packet.data.seqNum}
 
+(*  
+    Engish spec note: Since applyValidatorUpdate is not specified in the 
+    English spec, at this point, we assume that it returns the identity.
+    TODO: 
+    This operator should be updated once the logic of applyValidatorUpdate
+    is discussed.
+*)                                    
+ApplyValidatorUpdate(valSetChanges) ==
+    [valSet |-> babyValidatorSet, seqNum |-> babySeqNum]
+
+(*
+    English spec note: This function is not specified, hence we 
+    omit creating acknowledgements for the purpose of this TLA spec.
+    In case acknowledgements are necessary, the commented code below 
+    captures creating a packet acknowledgement.
+*)
 DefaultAck(chain, packet) ==
+    TRUE
+    (*
+    Uncomment if packet acknowledgements are added. 
+
     LET receiverChain == GetReceiverChain(packet) IN 
     LET event == [
         packet |-> packet,
@@ -171,23 +199,24 @@ DefaultAck(chain, packet) ==
         chain |-> receiverChain
     ] IN 
     
-    \* TODO: do we need to care about acknowledgements in chain store?
-    \* /\ packetAcknowledgements' = [packetAcknowledgements EXCEPT 
-    \*                                 ![chain] = @ \union {packet}]
-    /\ pendingEvents' = pendingEvents \union {event}
+    \/ /\ receiverChain = "parent"
+       /\ parentPendingEvents' = parentPendingEvents \union {event} 
+    \/ /\ receiverChain = "baby"
+       /\ babyPendingEvents' = babyPendingEvents \union {event}
+    *)
         
 (***************************** Actions ****************************)
 
 \* no preconditions specified since the function is not specified 
 FreezeStake ==
-    /\ upcomingEvent.function = "FreezeStake"
-    /\ nextParentSeqNum <= MaxChangeValidatorSeqNum
+    \* enabled if the next validator sequence number does not exceed the maximum
+    /\ parentNextSeqNum <= MaxChangeValidatorSeqNum
     \* create a packet 
-    /\ CreateChangeValSetPacket(upcomingEvent.chain, upcomingEvent.valSet, upcomingEvent.seqNum)
+    /\ CreateChangeValSetPacket("parent", ValidatorSetSequence[parentNextSeqNum], parentNextSeqNum)
     \* the validators whose stake is frozen on the parent chain are in the set:
     \* UNION {ValidatorSetSequence[i] : i \in 1..nextParentSeqNum \ unfrozenSeqNums}
     \* increase the sequence number of the next validator set change to be processed
-    /\ nextParentSeqNum' = nextParentSeqNum + 1
+    /\ parentNextSeqNum' = parentNextSeqNum + 1
     /\ UNCHANGED <<>> \* TODO 
 
 ChangeValidatorSet ==
@@ -195,21 +224,28 @@ ChangeValidatorSet ==
     /\ upcomingEvent.packet.data.type = "ChangeValidatorSet"
     \* there exists a blockchain that is a receiver of this packet
     /\ GetReceiverChain(upcomingEvent.packet) \in ChainIDs
-    \* all validators are validators at the parent blockchain
+    
     (*  
-        English spec note: A better precondition would be:
+        English spec note: The expected preconditions of ChangeValidatorSet 
+        (formalized in TLA+ below)
+        mix environment assumptions that need to be ensured by the staking 
+        module, with conditions that need to be checked (eg. babyChainID exists)
+
+    \* all validators are validators at the parent blockchain
+    \* Note: A better precondition would be:
          - all validators have an account at the parent blockchain
-    *)
     /\ upcomingEvent.packet.data.validatorSet \subseteq ParentValidators
     \* the stake of each validator is frozen and associated with this demand
     /\ upcomingEvent.packet.data.seqNum \notin unfrozenSeqNums
-    /\ upcomingEvent.packet.data.validatorSet \subseteq 
+    /\ upcomingEvent.packet.data.validatorSet =
             ValidatorSetSequence[upcomingEvent.packet.data.seqNum]
+    *)
+
     \* send packet, i.e., write packet to data store
     /\ SendChangeValSetPacket(upcomingEvent.chain, upcomingEvent.packet)
     /\ UNCHANGED <<>> \* TODO 
 
-(* Note on English spec: when the UnbondingOver packet is introduced, its data field
+(* English spec note: when the UnbondingOver packet is introduced, its data field
 is called seqNums, which leads to the interpretation that this is a set of sequence 
 numbers for which the unbonding has finished. However, in the function endBlock,
 where UnbondingOver packets are created, the data field of the packet seems to be 
@@ -242,12 +278,18 @@ OnPacketRecvBaby ==
     /\ DefaultAck(upcomingEvent.chain, upcomingEvent.packet)
     /\ UNCHANGED <<>> \* TODO 
 
+(*
+    English spec note: This function is not specified, hence we 
+    omit acknowledging packets for the purpose of this TLA spec.
+    In case OnPacketAck necessary, the code below captures 
+    acknowledging a packet.
 OnPacketAck ==
     /\ upcomingEvent.function \in "OnPacketAck"
     /\ upcomingEvent.packet \in packetCommitments[upcomingEvent.chain]
     \* remove packet commitment on acknowledgement
     /\ packetCommitments' = [packetCommitments EXCEPT ![upcomingEvent.chain] = @ \ {upcomingEvent.packet}]
     /\ UNCHANGED <<>> \* TODO 
+*)
 
 OnTimeoutPacketParent ==
     /\ upcomingEvent.packet.data.type = "ChangeValidatorSet"
@@ -255,6 +297,8 @@ OnTimeoutPacketParent ==
     /\ UnfreezeSingleStake(upcomingEvent.chain, upcomingEvent.packet.data.seqNum)
     \* ICS04: remove packet commitment 
     /\ packetCommitments' = [packetCommitments EXCEPT ![upcomingEvent.chain] = @ \ {upcomingEvent.packet}]
+    \* ICS04: close ordered channels, in our case, halt protocol
+    /\ haltProtocol' = TRUE
     \* TODO: other ICS04 packet-related actions on timeout?
     /\ UNCHANGED <<>> \* TODO 
 
@@ -266,60 +310,166 @@ OnTimeoutPacketBaby ==
         timeout happens on an ordered channel, the channel is 
         closed. Thus, sending packets again on the same channel 
         would be impossible.
+        TODO: 
+        A correct on timeout handler should be specified once the English spec 
+        is updated.
     *)
-    \* TODO: specify correct on timeout handler
     \* ICS04: remove packet commitment 
     /\ packetCommitments' = [packetCommitments EXCEPT ![upcomingEvent.chain] = @ \ {upcomingEvent.packet}]
+    \* ICS04: close ordered channels, in our case, halt protocol
+    /\ haltProtocol' = TRUE
     \* TODO: other ICS04 packet-related actions on timeout?
     /\ UNCHANGED <<>> \* TODO 
 
 (*  
     Engish spec note: The functions applyValidatorUpdate and finishUnbondingOVer
-    called in the body of the function endBlock are not specified 
+    called in the body of the function endBlock are not specified.
+    It is not clear if applyValidatorUpdate only adds new validators to 
+    the baby validator set, or if it also removes the validators for which 
+    unbonding already finished, or if it just overwrites the existing validator set 
+    with the validator set with the highest seqNum.
+    Further, applyValidatorUpdate should be defined as a part of the staking module.
 *)
 ExecuteEndBlock ==
-    LET newSeqNum == Max({vsc[2] : vsc \in babyValSetChanges}) IN
-    /\ babyValidatorSet' = UNION {vsc[1] : vsc \in babyValSetChanges}     
-    /\ babySeqNum' = newSeqNum
+    LET validatorUpdate == ApplyValidatorUpdate(babyValSetChanges) IN 
+    /\ babyValidatorSet' = validatorUpdate.validatorSet
+    /\ babySeqNum' = validatorUpdate.seqNum
+    \* start unbonding 
+    /\ StartUnbonding(validatorUpdate.seqNum)
     \* finish unbonding for mature validator sets
-    /\ \E matureSeqNums \in SUBSET SeqNums : 
-        /\ StartAndFinishUnbonding(newSeqNum, matureSeqNums) 
+    /\ \E matureSeqNum \in SeqNums : 
+        /\ matureSeqNum > babyLastUnbondedSeqNum
+        /\ matureSeqNum <= babySeqNum      
+        /\ FinishUnbonding(matureSeqNum) 
 
-Init ==
-    /\ nextParentSeqNum = 1
-    /\ unfrozenSeqNums = {}
-    /\ packetCommitments = [chain \in ChainIDs |-> {}]
-    /\ babyUnbonding = {}
-    /\ babyValidatorSet \subseteq AllValidators
-    /\ babySeqNum = 1
-    /\ babyValSetChanges = {}
-    /\ pendingEvents = {} 
-    /\ upcomingEvent = NullEvent
-
-\* TODO: sequence numbers in packets? ordered channels? 
-Next ==
+ProtocolStep ==
     \/ FreezeStake
-    \/ \E event \in pendingEvents :         
-        /\ upcomingEvent' = event
-        /\ pendingEvents' = pendingEvents \ {event}
-        /\ \/ /\ event.function = "ChangeValidatorSet"
-              /\ event.chain = "parent"
-              /\ ChangeValidatorSet
-           \/ /\ event.function = "OnPacketRecv"
-              /\ event.chain = "parent"
-              /\ OnPacketRecvParent
-           \/ /\ event.function = "OnPacketRecv"
-              /\ event.chain = "baby"
-              /\ OnPacketRecvBaby
-           \/ /\ event.function = "OnPacketAck"
-              /\ OnPacketAck
-           \/ /\ event.chain = "parent"
-              /\ OnTimeoutPacketParent
-           \/ /\ event.chain = "baby"
-              /\ OnTimeoutPacketBaby
+    \/ /\ parentPendingEvents /= <<>>
+       /\ LET event == Head(parentPendingEvents) IN
+            /\ upcomingEvent' = Head(parentPendingEvents)
+            /\ parentPendingEvents' = Tail(parentPendingEvents)
+            /\ \/ /\ event.function = "ChangeValidatorSet"
+                  /\ event.chain = "parent"
+                  /\ ChangeValidatorSet
+               \/ /\ event.function = "OnPacketRecv"
+                  /\ event.chain = "parent"
+                  /\ OnPacketRecvParent
+               (* 
+                Uncomment if packet acknowledgements are added.
+                \/ /\ event.function = "OnPacketAck"
+                    /\ OnPacketAck
+               *)      
+               \/ /\ event.chain = "parent"
+                  /\ OnTimeoutPacketParent   
+    \/ /\ babyPendingEvents /= <<>>
+       /\ LET event == Head(babyPendingEvents) IN
+            /\ upcomingEvent' = event
+            /\ parentPendingEvents' = Tail(babyPendingEvents)      
+            /\ \/ /\ event.function = "OnPacketRecv"
+                  /\ event.chain = "baby"
+                  /\ OnPacketRecvBaby
+                (* 
+                Uncomment if packet acknowledgements are added.
+                \/ /\ event.function = "OnPacketAck"
+                    /\ OnPacketAck
+                *)  
+               \/ /\ event.chain = "baby"
+                  /\ OnTimeoutPacketBaby
     \/ ExecuteEndBlock
 
 
-           \* TODO ...
 
+Init ==
+    \* parent variables
+    /\ parentNextSeqNum = 1
+    /\ parentUnfrozenSeqNums = {} 
+    \* baby variables
+    /\ babyValidatorSet = {}
+    /\ babySeqNum = 0
+    /\ babyUnbonding = {}
+    /\ babyValSetChanges = {}
+    /\ babyLastUnbondedSeqNum = 0
+    \* shared variables
+    /\ packetCommitments = [chain \in ChainIDs |-> {}]
+    /\ haltProtocol = FALSE
+    \* events simulating a relayer
+    /\ parentPendingEvents = <<>>
+    /\ babyPendingEvents = <<>>
+    /\ upcomingEvent = NullEvent
+
+
+Next ==
+    \/ /\ ~haltProtocol
+       /\ ProtocolStep
+    \/ /\ haltProtocol
+       /\ UNCHANGED vars
+
+\* TODO: specify fairness constraint
+Fairness ==
+    TRUE
+
+(******************** Invariants and properties *******************)
+ 
+\* all validators in the baby validator set 
+\* originated from a packet sent by the parent chain
+ValSetChangeValidity ==
+    \* for each packet sent by the parent chain
+    \A packet \in packetCommitments["parent"] :
+        \* whose seqNum is greater than babyLastUnbondedSeqNum
+        packet.data.seqNum > babyLastUnbondedSeqNum 
+            \* its validatorSet is a part of the babyValidatorSet
+            => packet.data.validatorSet \subseteq babyValidatorSet
+
+\* the validator sets whose stake is unfrozen on the parent chain
+\* have sequence numbers which are less than or equal to the sequence number 
+\* of the validator set that was unbonded last on the baby chain
+UnfrozenAreUnbondedFirst ==
+    \A seqNum \in parentUnfrozenSeqNums : 
+        seqNum <= babyLastUnbondedSeqNum
+
+\* the validator sets whose stake is unfrozen on the parent chain
+\* have sequence numbers which are less than the sequence number 
+\* of the next validator set change to be processed
+UnfrozenWereFrozenBefore ==
+    \A seqNum \in parentUnfrozenSeqNums : 
+        seqNum <= parentNextSeqNum
+
+\* the sequence number of the last unbonded validator set at the baby 
+\* blockchain is smaller than the current sequence number at the baby blockchain
+UnbondedIsSmallerThanCurrent ==
+   babyLastUnbondedSeqNum < babySeqNum 
+
+
+\* all validator sets whose stake is frozen eventually either 
+\* get unfrozen or the protocol halts (there is a timeout)
+StakeOfParentValidatorsIsEventuallyUnfrozen ==
+    \A seqNum \in SeqNums :
+        parentNextSeqNum = seqNum
+            => <>(\/ seqNum \in parentUnfrozenSeqNums
+                  \/ haltProtocol)
+
+\* all validator set changes eventually either get processed 
+\* at the baby chain or the protocol halts (there is a timeout)
+ValidatorSetChangeIsEventuallyProcessed ==
+    \A seqNum \in SeqNums :
+        parentNextSeqNum = seqNum
+            => <>(\/ babySeqNum >= seqNum
+                  \/ haltProtocol)
+
+\* all validator sets that are unbonded on the baby chain eventually
+\* either get their stake unfrozen on the parent chain 
+\* or the protocol halts (there is a timeout)
+UnbondedAreEventuallyUnfrozen ==
+    \A seqNum \in SeqNums :
+        babyLastUnbondedSeqNum = seqNum
+            => <>(\/ Max(parentUnfrozenSeqNums) <= seqNum
+                  \/ haltProtocol)
+
+\* all validator set changes eventually either get unbonded 
+\* at the baby chain or the protocol halts (there is a timeout)
+ValidatorSetIsEventuallyUnbonded ==
+    \A seqNum \in SeqNums :
+        parentNextSeqNum = seqNum
+            => <>(\/ babyLastUnbondedSeqNum >= seqNum - 1
+                  \/ haltProtocol)
 ===================================================================
