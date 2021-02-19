@@ -3,12 +3,12 @@
 ## Pseudocode
 
 In this document, we represent pseudocode of the evidence handling subprotocol for the "light client attack" scenario.
-<br>First, we present data structures that abstract (1) an evidence of a misbehaviour of a validator,  and (2) an evidence that a light client attack has occurred.
+<br>First, we present data structures that abstract (1) an evidence of a misbehavior of a validator,  and (2) an evidence that a light client attack has occurred.
 <br>Then, we define functions and callbacks needed to ensure that validators of the baby blockchain that have mounted a light client attack are slashed at the parent blockchain.
 
 ### Data Structures
 
-The following data structure abstracts an evidence of a misbehaviour of a validator:
+The following data structure abstracts an evidence of a misbehavior of a validator:
 ```golang
 type InternalEvidence struct {
   evidence Evidence
@@ -16,9 +16,9 @@ type InternalEvidence struct {
   chain ChainId
 }
 ```
-Namely, this data structure specifies that validator *validator* committed a misbehaviour which is provable with *evidence*.
-Note that we specify the identifier of chain where the misbehaviour occurred (this represents a slight difference from the "single-chain" scenario).
-We assume that each correct full node could verify this statement and that no verifiable evidence could ever be produced to prove a misbehaviour of a correct validator.
+Namely, this data structure specifies that validator *validator* committed a misbehavior which is provable with *evidence*.
+Note that we specify the identifier of chain where the misbehavior occurred (this represents a slight difference from the "single-chain" scenario).
+We assume that each correct full node could verify this statement and that no verifiable evidence could ever be produced to prove a misbehavior of a correct validator.
 See [Light Client Attack Detector](https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/detection/detection_003_reviewed.md).
 
 Next, the data structure below represents an evidence that a light client attack has taken place:
@@ -34,7 +34,7 @@ type LightClientAttackEvidence struct {
 
 Let us first describe the protocol that is executed once a light client of the baby blockchain discovers that a light client attack has occurred:
 <br>Once a light client discovers that a light client attack on the baby blockchain has taken place, it transfers this information to full nodes of the baby blockchain (we assume that at least one correct full node receives this information).
-<br>A correct full node is able to interpret the received information and produce an evidence of misbehaviour for some faulty validators.
+<br>A correct full node is able to interpret the received information and produce an evidence of misbehavior for some faulty validators.
 <br>Then, the full node transfers information about exposed faulty validators (along with evidences) to full nodes of the parent blockchain.
 <br>Lastly, once a correct full node of the parent blockchain receives this information, it informs its staking module, which is responsible for ensuring that the evidences end up committed on the parent blockchain.
 
@@ -50,7 +50,7 @@ func submitLightClientAttackEvidence(evidence LightClientAttackEvidence, fullNod
 -Error condition
   - If the precondition is violated
 
-As we have already mentioned, a (correct) full node of the baby blockchain should discover a set of faulty validators (with corresponding evidences of misbehaviours) whenever a light client attack is observed by the light client.
+As we have already mentioned, a (correct) full node of the baby blockchain should discover a set of faulty validators (with corresponding evidences of misbehaviors) whenever a light client attack is observed by the light client.
 The following function captures this logic (please, see [Light client Attackers Isolation](https://github.com/tendermint/spec/blob/master/rust-spec/lightclient/attacks/isolate-attackers_002_reviewed.md#LCAI-FUNC-NONVALID1%5D) for more details):
 ```golang
 func isolateMisbehavingProcesses(ev LightClientAttackEvidence) []InternalEvidence {
@@ -99,7 +99,7 @@ func lightClientAttackEvidenceSubmitted(ev LightClientAttackEvidence) {
 Lastly, we define a callback triggered at a correct full node of the parent blockchain once it receives an array of evidences (`Evidence`):
 ```golang
 // Triggered once a full node of the parent blockchain receives an array of Evidence from a full node of the baby blockchain
-func evidenceOfMisbehavioursSubmitted(evidences []Evidence) {
+func evidenceOfmisbehaviorsSubmitted(evidences []Evidence) {
   stakingModule.processEvidences(evidences)
 }
 ```
@@ -125,14 +125,14 @@ func stakingModule.processEvidences(evidences []Evidence)
 
 #### Committed Evidence Scenario
 
-We now consider the protocol that is executed once an evidence of a misbehaviour is committed on the baby blockchain.
+We now consider the protocol that is executed once an evidence of a misbehavior is committed on the baby blockchain.
 The evidence is simply transferred to the parent blockchain via IBC.
 <br> **Remark:** We do not define all the functions and callbacks needed for an IBC communication to be established between two blockchains.
 For more details, please see: [Validator Change Protocol](https://github.com/informalsystems/cross-chain-validation/blob/main/spec/valset-update-protocol.md).
 
-The following callback is triggered once there exists an evidence of a misbehaviour committed on the baby blockchain:
+The following callback is triggered once there exists an evidence of a misbehavior committed on the baby blockchain:
 ```golang
-// Invoked once there is an evidence of a misbehaviour committed on the baby blockchain
+// Invoked once there is an evidence of a misbehavior committed on the baby blockchain
 func evidenceCommitted(evidence Evidence) {
   // create the CommittedEvidencePacket
   CommittedEvidencePacket packet = CommittedEvidencePacket{evidence}
