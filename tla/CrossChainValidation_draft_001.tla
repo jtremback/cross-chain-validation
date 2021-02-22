@@ -361,6 +361,7 @@ ProtocolStep ==
                *)      
                \/ /\ event.chain = "parent"
                   /\ OnTimeoutPacketParent   
+    \* step of baby chain IBC application
     \/ /\ babyPendingEvents /= <<>>
        /\ LET event == Head(babyPendingEvents) IN
             /\ upcomingEvent' = event
