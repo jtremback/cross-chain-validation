@@ -213,7 +213,7 @@ DefaultAck(chain, packet) ==
 (***************************** Actions ****************************)
 
 \* no preconditions specified since the function is not specified 
-StartValSetUpdate ==
+StartValSetUpdateParent ==
     \* enabled if the next validator sequence number does not exceed the maximum
     /\ parentNextSeqNum <= MaxChangeValidatorSeqNum
     \* create a packet 
@@ -224,7 +224,7 @@ StartValSetUpdate ==
     /\ parentNextSeqNum' = parentNextSeqNum + 1
     /\ UNCHANGED <<>> \* TODO 
 
-ChangeValidatorSet ==
+ChangeValidatorSetParent ==
     /\ upcomingEvent.function = "ChangeValidatorSet"
     /\ upcomingEvent.packet.data.type = "ChangeValidatorSet"
     \* there exists a blockchain that is a receiver of this packet
@@ -335,7 +335,7 @@ OnTimeoutPacketBaby ==
     with the validator set with the highest seqNum.
     Further, applyValidatorUpdate should be defined as a part of the staking module.
 *)
-ExecuteEndBlock ==
+ExecuteEndBlockBaby ==
     LET validatorUpdate == ApplyValidatorUpdate(babyValSetChanges) IN 
     /\ babyValidatorSet' = validatorUpdate.validatorSet
     /\ babySeqNum' = validatorUpdate.seqNum
@@ -348,7 +348,7 @@ ExecuteEndBlock ==
         /\ FinishUnbonding(matureSeqNum) 
 
 ProtocolStep ==
-    \/ StartValSetUpdate
+    \/ StartValSetUpdateParent
     \* step of parent chain IBC application
     \/ /\ parentPendingEvents /= <<>>
        /\ LET event == Head(parentPendingEvents) IN
@@ -356,7 +356,7 @@ ProtocolStep ==
             /\ parentPendingEvents' = Tail(parentPendingEvents)
             /\ \/ /\ event.function = "ChangeValidatorSet"
                   /\ event.chain = "parent"
-                  /\ ChangeValidatorSet
+                  /\ ChangeValidatorSetParent
                \/ /\ event.function = "OnPacketRecv"
                   /\ event.chain = "parent"
                   /\ OnPacketRecvParent
@@ -382,8 +382,8 @@ ProtocolStep ==
                 *)  
                \/ /\ event.chain = "baby"
                   /\ OnTimeoutPacketBaby
-    \* Endblock function at baby chain
-    \/ ExecuteEndBlock
+    \* endBlock function at baby chain
+    \/ ExecuteEndBlockBaby
 
 
 
