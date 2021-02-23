@@ -169,6 +169,9 @@ FinishUnbonding(matureSeqNum) ==
 
 AddValidatorSetChange(chain, packet) ==
     /\ chain = "baby"
+    \* this is an abstraction of the English spec -- 
+    \* we only store the sequence number of the validator set change, 
+    \* as we already have the validator set stored in the constant ValidatorSetSequence
     /\ babyValSetChanges' = babyValSetChanges \union {packet.data.seqNum}
 
 (*  
@@ -179,6 +182,8 @@ AddValidatorSetChange(chain, packet) ==
     is discussed.
 *)                                    
 ApplyValidatorUpdate(valSetChanges) ==
+    \* for now, we return the identity
+    \* TODO: 
     [valSet |-> babyValidatorSet, seqNum |-> babySeqNum]
 
 (*
@@ -208,7 +213,7 @@ DefaultAck(chain, packet) ==
 (***************************** Actions ****************************)
 
 \* no preconditions specified since the function is not specified 
-FreezeStake ==
+StartValSetUpdate ==
     \* enabled if the next validator sequence number does not exceed the maximum
     /\ parentNextSeqNum <= MaxChangeValidatorSeqNum
     \* create a packet 
@@ -343,7 +348,7 @@ ExecuteEndBlock ==
         /\ FinishUnbonding(matureSeqNum) 
 
 ProtocolStep ==
-    \/ FreezeStake
+    \/ StartValSetUpdate
     \/ /\ parentPendingEvents /= <<>>
        /\ LET event == Head(parentPendingEvents) IN
             /\ upcomingEvent' = Head(parentPendingEvents)
