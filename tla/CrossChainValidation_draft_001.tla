@@ -344,6 +344,7 @@ ExecuteEndBlock ==
 
 ProtocolStep ==
     \/ FreezeStake
+    \* step of parent chain IBC application
     \/ /\ parentPendingEvents /= <<>>
        /\ LET event == Head(parentPendingEvents) IN
             /\ upcomingEvent' = Head(parentPendingEvents)
