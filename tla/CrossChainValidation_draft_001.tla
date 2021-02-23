@@ -382,6 +382,7 @@ ProtocolStep ==
                 *)  
                \/ /\ event.chain = "baby"
                   /\ OnTimeoutPacketBaby
+    \* Endblock function at baby chain
     \/ ExecuteEndBlock
 
 
