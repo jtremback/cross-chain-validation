@@ -177,13 +177,12 @@ AddValidatorSetChange(chain, packet) ==
 (*  
     Engish spec note: Since applyValidatorUpdate is not specified in the 
     English spec, at this point, we assume that it returns the identity.
-    TODO: 
-    This operator should be updated once the logic of applyValidatorUpdate
-    is discussed.
 *)                                    
 ApplyValidatorUpdate(valSetChanges) ==
-    \* for now, we return the identity
-    \* TODO: 
+    \* For now, we assume this operator returns the current value of the 
+    \* baby validator set and sequence number
+    \* TODO: This operator should be updated once the logic of applyValidatorUpdate
+    \* is discussed.
     [valSet |-> babyValidatorSet, seqNum |-> babySeqNum]
 
 (*
