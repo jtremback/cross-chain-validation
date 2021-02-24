@@ -416,7 +416,7 @@ Fairness ==
     TRUE
 
 (******************** Invariants and properties *******************)
- 
+
 \* all validators in the baby validator set 
 \* originated from a packet sent by the parent chain
 ValSetChangeValidity ==
@@ -451,32 +451,32 @@ UnbondedIsSmallerThanCurrent ==
 \* get unfrozen or the protocol halts (there is a timeout)
 StakeOfParentValidatorsIsEventuallyUnfrozen ==
     \A seqNum \in SeqNums :
-        parentNextSeqNum = seqNum
+        [](parentNextSeqNum = seqNum
             => <>(\/ seqNum \in parentUnfrozenSeqNums
-                  \/ haltProtocol)
+                  \/ haltProtocol))
 
 \* all validator set changes eventually either get processed 
 \* at the baby chain or the protocol halts (there is a timeout)
 ValidatorSetChangeIsEventuallyProcessed ==
     \A seqNum \in SeqNums :
-        parentNextSeqNum = seqNum
+        [](parentNextSeqNum = seqNum
             => <>(\/ babySeqNum >= seqNum
-                  \/ haltProtocol)
+                  \/ haltProtocol))
 
 \* all validator sets that are unbonded on the baby chain eventually
 \* either get their stake unfrozen on the parent chain 
 \* or the protocol halts (there is a timeout)
 UnbondedAreEventuallyUnfrozen ==
     \A seqNum \in SeqNums :
-        babyLastUnbondedSeqNum = seqNum
+        [](babyLastUnbondedSeqNum = seqNum
             => <>(\/ Max(parentUnfrozenSeqNums) <= seqNum
-                  \/ haltProtocol)
+                  \/ haltProtocol))
 
 \* all validator set changes eventually either get unbonded 
 \* at the baby chain or the protocol halts (there is a timeout)
 ValidatorSetIsEventuallyUnbonded ==
     \A seqNum \in SeqNums :
-        parentNextSeqNum = seqNum
+        [](parentNextSeqNum = seqNum
             => <>(\/ babyLastUnbondedSeqNum >= seqNum - 1
-                  \/ haltProtocol)
+                  \/ haltProtocol))
 ===================================================================
