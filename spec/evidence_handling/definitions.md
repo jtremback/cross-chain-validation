@@ -11,7 +11,7 @@ Every correct full node of the parent blockchain verifies that *e* is a valid ev
 
 In the rest of the document, we analyze two scenarios:
 1. An observed light client attack on the baby blockchain, and
-2. Evidence of a misbehaviour committed in a block on the baby blockchain.
+2. Evidence of a misbehavior committed in a block on the baby blockchain.
 
 We first discuss the light client attack scenario.
 Then, we do the same for the second scenario.
