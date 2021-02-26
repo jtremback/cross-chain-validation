@@ -124,11 +124,18 @@ CreateAndSendUnbondingOverPackets(chain, seqNum) ==
         function |-> "OnPacketRecv",
         chain |-> "parent"
     ] IN
+    LET timeoutEvent == [
+        packet |-> packet,
+        function |-> "OnTimeoutPacket",
+        chain |-> "baby"
+    ]
 
-    \* send packet
+    \* send packet (or timeout TODO)
     /\ packetCommitments' = [packetCommitments EXCEPT ![chain] = @ \union {packet}]
     \* add OnPacketRecv event for parent chain
     /\ parentPendingEvents' = Append(parentPendingEvents, event)
+    \* non-deterministically add timeout packet event to baby chain
+    /\ babyPendingEvents' \in {babyPendingEvents, Append(babyPendingEvents, timeoutEvent)}
 
 SendChangeValSetPacket(chain, packet) ==
     LET event == [
@@ -136,11 +143,20 @@ SendChangeValSetPacket(chain, packet) ==
         function |-> "OnPacketRecv",
         chain |-> GetReceiverChain(packet)
     ] IN 
+    LET timeoutEvent == [
+        packet |-> packet,
+        function |-> "OnTimeoutPacket",
+        chain |-> chain
+    ] IN
 
-    \* send packet
+    \* send packet (or timeout TODO)
     /\ packetCommitments' = [packetCommitments EXCEPT ![chain] = @ \union {packet}]
     \* add OnPacketRecv event for baby chain
     /\ babyPendingEvents' = Append(babyPendingEvents, event)
+    \* non-deterministically add timeout packet event to parent chain
+    /\ parentPendingEvents' \in {parentPendingEvents, Append(parentPendingEvents, timeoutEvent)}
+
+
 
 (* Staking module *)
 UnfreezeStake(chain, seqNum) ==
@@ -179,11 +195,19 @@ AddValidatorSetChange(chain, packet) ==
     English spec, at this point, we assume that it returns the identity.
 *)                                    
 ApplyValidatorUpdate(valSetChanges) ==
-    \* For now, we assume this operator returns the current value of the 
-    \* baby validator set and sequence number
+    \* For now, we assume this operator returns a new baby validator set and a 
+    \* new baby sequence number, which are the validator set and sequence number
+    \* of the last validator set change sent to the baby blockchain.
     \* TODO: This operator should be updated once the logic of applyValidatorUpdate
     \* is discussed.
-    [valSet |-> babyValidatorSet, seqNum |-> babySeqNum]
+    LET newSeqNum == IF valSetChanges /= {}
+                     THEN Max(valSetChanges)
+                     ELSE 0 IN 
+    LET newValSet == IF newSeqNum \in DOMAIN ValidatorSetSequence
+                     THEN ValidatorSetSequence[newSeqNum]
+                     ELSE {} IN
+
+    [valSet |-> newValSet, seqNum |-> newSeqNum]
 
 (*
     English spec note: This function is not specified, hence we 
@@ -326,7 +350,7 @@ OnTimeoutPacketBaby ==
     /\ UNCHANGED <<>> \* TODO 
 
 (*  
-    Engish spec note: The functions applyValidatorUpdate and finishUnbondingOVer
+    Engish spec note: The functions applyValidatorUpdate and finishUnbondingOver
     called in the body of the function endBlock are not specified.
     It is not clear if applyValidatorUpdate only adds new validators to 
     the baby validator set, or if it also removes the validators for which 
@@ -336,11 +360,15 @@ OnTimeoutPacketBaby ==
 *)
 ExecuteEndBlockBaby ==
     LET validatorUpdate == ApplyValidatorUpdate(babyValSetChanges) IN 
+    /\ babyValSetChanges /= {}
     /\ babyValidatorSet' = validatorUpdate.validatorSet
     /\ babySeqNum' = validatorUpdate.seqNum
+    /\ babyValSetChanges' = {}
     \* start unbonding 
     /\ StartUnbonding(validatorUpdate.seqNum)
-    \* finish unbonding for mature validator sets
+    \* finish unbonding for mature validator sets 
+    \* the existential quantifier is an abstraction that allows us to find sequence 
+    \* numbers for which the unbonding period is over
     /\ \E matureSeqNum \in SeqNums : 
         /\ matureSeqNum > babyLastUnbondedSeqNum
         /\ matureSeqNum <= babySeqNum      
@@ -364,8 +392,10 @@ ProtocolStep ==
                 \/ /\ event.function = "OnPacketAck"
                     /\ OnPacketAck
                *)      
-               \/ /\ event.chain = "parent"
-                  /\ OnTimeoutPacketParent   
+               \/ /\ event.function = "OnTimeoutPacket"
+                  /\ event.chain = "parent"
+                  /\ OnTimeoutPacketParent 
+
     \* step of baby chain IBC application
     \/ /\ babyPendingEvents /= <<>>
        /\ LET event == Head(babyPendingEvents) IN
@@ -379,8 +409,10 @@ ProtocolStep ==
                 \/ /\ event.function = "OnPacketAck"
                     /\ OnPacketAck
                 *)  
-               \/ /\ event.chain = "baby"
-                  /\ OnTimeoutPacketBaby
+              \/ /\ event.function = "OnTimeoutPacket"
+                 /\ event.chain = "baby"
+                 /\ OnTimeoutPacketBaby 
+               
     \* endBlock function at baby chain
     \/ ExecuteEndBlockBaby
 
@@ -411,6 +443,8 @@ Next ==
     \/ /\ haltProtocol
        /\ UNCHANGED vars
 
+Spec == Init /\ [][Next]_vars 
+
 \* TODO: specify fairness constraint
 Fairness ==
     TRUE
@@ -419,6 +453,7 @@ Fairness ==
 
 \* all validators in the baby validator set 
 \* originated from a packet sent by the parent chain
+\* TODO: clarify after ApplyValidatorUpdate is specified correctly 
 ValSetChangeValidity ==
     \* for each packet sent by the parent chain
     \A packet \in packetCommitments["parent"] :
