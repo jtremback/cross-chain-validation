@@ -73,7 +73,8 @@ struct StartBabyBlockchainPacket {}
 ### Parent Blockchain
 
 ```golang
-// invoked once the genesis file transaction of all validators of the baby // blockchain is committed on the parent blockchain
+// invoked once the genesis file transaction of all validators of the baby
+// blockchain is committed on the parent blockchain
 func GenesisFileTransactionSigned (
   ts: GenesisFileTransaction[]) {
   // initialize the staking module for the baby
@@ -82,6 +83,9 @@ func GenesisFileTransactionSigned (
   // freeze the stake of all initial validators of the baby blockchain
   stakingModule.freezeStake(1) // 1 is the sequence number of the validator set change; see "Technical Specification"
 
+  // validator set changes not allowed yet
+  allowValidatorSetChanges[ts[0].genesisFile.chainId] = false
+
   // initialize the channel creation; see "Technical Specification"
   IBC.initChannel(ts[0].genesisFile.chainId)
 }
@@ -89,10 +93,31 @@ func GenesisFileTransactionSigned (
 
 - Expected precondition
   - The genesis file of the blockchain with the *ts.genesisFile.chainId* identifier is created
-  - All validators specified in *ts.genesisFile* signed the *ts* transaction
+  - All validators specified in the genesis file of the baby blockchain issued the genesis file transaction
 - Expected postcondition
   - Stake of each initial validator is frozen and associated with the sequence number 1
-  - The empty StartBabyBlockchainPacket is created
+  - The channel creation is initiated
+- Error condition
+  - If the precondition is violated
+
+```golang
+// invoked once the channel is successfully established; see "Technical Specification"
+func onChanOpenConfirm () {
+  // create the empty StartBabyBlockchainPacket packet
+  packet = StartBabyBlockchainPacket{}
+
+  // obtain the destination port of the baby blockchain
+  destPort = getPort(parentChainId)
+
+  // send the packet
+  handler.sendPacket(Packet{timeoutHeight, timeoutTimestamp, destPort, destChannel, sourcePort, sourceChannel, packet}, getCapability("port"))
+}
+```
+
+- Expected precondition
+  - A channel between the parent and the baby blockchain is established
+- Expected postcondition
+  - A StartBabyBlockchainPacket packet is created
 - Error condition
   - If the precondition is violated
 
@@ -101,7 +126,49 @@ func GenesisFileTransactionSigned (
 func onRecvPacket (
   packet: Packet) {
   // the packet is of StartBabyBlockchainPacket type
+  assert(packet.type = StartBabyBlockchainPacketAck)
+
+  // validator set changes allowed
+  allowValidatorSetChanges[packet.chainId] = true
+}
+```
+
+- Expected precondition
+  - The *packet* packet is sent to the parent blockchain before the packet is received
+  - The packet is of the *StartBabyBlockchainPacketAck* type
+- Expected postcondition
+  - Validator set changes for the baby blockchain are allowed
+- Error condition
+  - If the precondition is violated  
+
+### Baby Blockchain
+
+```golang
+// executed once the validator of the baby blockchain starts executing
+func init () {
+  // set the current mode to the "Initialization" mode
+  initialization = true
+}
+```
+
+- Expected precondition
+  - The validator of the baby blockchain started executing
+- Expected postcondition
+  - Current mode set to the "Initialization" mode
+- Error condition
+  - If the precondition is violated
+
+**Remark:** The "Initialization" mode simply represents the fact that the validator should not execute (i.e., trust) any (non-channel-establishing) transactions while in this mode.
+
+```golang
+// executed at the baby blockchain to handle the delivery of an IBC packet
+func onRecvPacket (
+  packet: Packet) {
+  // the packet is of StartBabyBlockchainPacket type
   assert(packet.type = StartBabyBlockchainPacket)
+
+  // remove the "Initialization" mode
+  initialization = false
 
   // the baby blockchain is now secured
   // construct the default acknowledgment
@@ -117,3 +184,10 @@ func onRecvPacket (
   - The default acknowledgment is created
 - Error condition
   - If the precondition is violated
+
+## Correctness Arguments
+
+If the baby and the parent blockchains are not censored and the relayer works correctly, then a channel between two blockchains will eventually be established.
+Moreover, the *StartBabyBlockchainPacket* packet is eventually received by the baby blockchain.
+Hence, the baby blockchain (at that moment) leaves its "Initialization" mode and starts its normal operation.
+Lastly, the baby blockchain is secured at this moment.s
