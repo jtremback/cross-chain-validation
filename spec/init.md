@@ -17,10 +17,10 @@ Moreover, we assume that the parent blockchain maintains "allowValidatorSetChang
 
 We now present the set of properties we aim to ensure:
 - Baby Blockchain Safety: If *initialization = false* and both blockchains perform valid transitions, then some validators of the baby blockchain are bonded on the parent blockchain.
-- Baby Blockchain Liveness: If both blockchains perform valid transitions, the relayer works correctly and no blockchain is censored, eventually *liveness = false* at the baby blockchain.
+- Baby Blockchain Liveness: If both blockchains perform valid transitions, the relayer works correctly, no blockchain is censored and 2/3 correct validators signed the genesis file, eventually *liveness = false* at the baby blockchain.
 
 - Parent Blockchain Safety: If *allowValidatorSetChanges = true* and both blockchains perform valid transitions, then *initialization = false* at the baby blockchain.
-- Parent Blockchain Liveness: If both blockchains perform valid transitions, the relayer works correctly and no blockchain is censored, eventually *allowValidatorSetChanges = true* at the parent blockchain.
+- Parent Blockchain Liveness: If both blockchains perform valid transitions, the relayer works correctly, no blockchain is censored and 2/3 correct validators signed the genesis file, eventually *allowValidatorSetChanges = true* at the parent blockchain.
 
 Lastly, we discuss the invariants we ensure:
 - Let *V* be a validator set of the baby blockchain and let *initialization = true*.
