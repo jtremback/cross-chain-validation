@@ -114,19 +114,13 @@ func onChanOpenConfirm () {
 }
 ```
 
-- Expected precondition
-  - A channel between the parent and the baby blockchain is established
-- Expected postcondition
-  - A StartBabyBlockchainPacket packet is created
-- Error condition
-  - If the precondition is violated
-
 ```golang
-// executed at the baby blockchain to handle the delivery of an IBC packet
-func onRecvPacket (
-  packet: Packet) {
+// executed at the parent blockchain to handle the delivery of an IBC acknowledgment
+func onAcknowledgePacket (
+  packet: Packet,
+  acknowledgement: bytes) {
   // the packet is of StartBabyBlockchainPacket type
-  assert(packet.type = StartBabyBlockchainPacketAck)
+  assert(packet.type = StartBabyBlockchainPacket)
 
   // validator set changes allowed
   allowValidatorSetChanges[packet.chainId] = true
@@ -138,6 +132,25 @@ func onRecvPacket (
   - The packet is of the *StartBabyBlockchainPacketAck* type
 - Expected postcondition
   - Validator set changes for the baby blockchain are allowed
+- Error condition
+  - If the precondition is violated  
+
+```golang
+// executed at the parent blockchain to handle the timeout of the IBC packet
+func inAcknowledgePacket (
+  packet: Packet) {
+  // the packet is of StartBabyBlockchainPacket type
+  assert(packet.type = StartBabyBlockchainPacket)
+
+  // TODO figure out what to do in this case
+}
+```
+
+- Expected precondition
+  - The *packet* packet sent to the parent blockchain timeouts
+  - The packet is of the *StartBabyBlockchainPacketAck* type
+- Expected postcondition
+  - TODO
 - Error condition
   - If the precondition is violated  
 
