@@ -5,6 +5,35 @@
 This document discusses how the initialization of the baby blockchain occurs.
 Namely, we consider the parent blockchain that is already operating and we describe how validators of the parent blockchain "lend" their services to the newly created baby blockchain.
 
+## Problem Statement
+
+We assume that the baby blockchain maintains the "initialization" variable that is set to either true or false.
+
+**Baby Blockchain Assumption:** If *initialization = true*, the application of the baby blockchain does not execute (i.e., trust) any (non-channel-establishing) transactions.
+
+Moreover, we assume that the parent blockchain maintains "allowValidatorSetChanges" variable that is set to either true or false.
+
+**Parent Blockchain Assumption:** If *allowValidatorSetChanges = false*, the parent blockchain does not require any validator set changes to the validator set of the baby blockchain.
+
+We now present the set of properties we aim to ensure:
+- Baby Blockchain Safety: If *initialization = false* and both blockchains perform valid transitions, then some validators of the baby blockchain are bonded on the parent blockchain.
+- Baby Blockchain Liveness: If both blockchains perform valid transitions and the relayer works correctly, eventually *liveness = false* at the baby blockchain.
+
+- Parent Blockchain Safety: If *allowValidatorSetChanges = true* and both blockchains perform valid transitions, then *initialization = false* at the baby blockchain.
+- Parent Blockchain Liveness: If both blockchains perform valid transitions and the relayer works correctly, eventually *allowValidatorSetChanges = true* at the parent blockchain.
+
+Lastly, we discuss the invariants we ensure:
+- Let *V* be a validator set of the baby blockchain and let *initialization = true*.
+Then, *V* is the initial validator set of the baby blockchain.    
+
+## Validator Operator Viewpoint
+
+A operator of a validator participates in a social consensus in order to validate the baby blockchain.
+The social consensus process leads to a creation of the genesis file of the baby blockchain.
+Roughly speaking, the validator operator "uses" the genesis file in two ways:
+- It starts the validator for the baby blockchain.
+- It uses the genesis file in order to issue a transaction to the parent blockchain specifying that it is indeed willing to participate as a validator on the baby blockchain (in order to fulfil the cross-chain validation concept).
+
 ## Intuition
 
 In this section, we briefly introduce the idea behind the initialization protocol.
@@ -21,29 +50,6 @@ However, correct validators do not execute any transaction except ones that aim 
 3. Once all validators of the baby blockchain have issued the aforementioned transaction, the parent blockchain (1) initializes the staking module for the baby blockchain, and (2) initiates the establishment of a connection between itself and the baby blockchain.
 Once these two tasks have been successfully executed, the process sends a packet to the baby blockchain that signalizes that the connection has been made.
 Once the acknowledgment for the packet is received, the parent blockchain can start manipulating the validator set of the baby blockchain.
-
-## Validator Operator Viewpoint
-
-A operator of a validator participates in a social consensus in order to validate the baby blockchain.
-The social consensus process leads to a creation of the genesis file of the baby blockchain.
-Roughly speaking, the validator operator "uses" the genesis file in two ways:
-- It starts the validator for the baby blockchain.
-- It uses the genesis file in order to issue a transaction to the parent blockchain specifying that it is indeed willing to participate as a validator on the baby blockchain (in order to fulfil the cross-chain validation concept).
-
-
-
-## Definitions
-
-Since the initial validators of the baby blockchain are bonded and slashable on the parent blockchain, the baby blockchain is not *safe* until its initial validators are bonded on the parent blockchain.
-Thus, we specify a special IBC packet of type START_BABY_BLOCKCHAIN sent by the parent to the baby blockchain to signalize that the initial validators of the baby blockchain are bonded.
-In other words, the baby blockchain starts to "operate" once the START_BABY_BLOCKCHAIN packet is received.
-Importantly, nothing prevents the baby blockchain from producing blocks even before the START_BABY_BLOCKCHAIN packet is received.
-However, the produced transaction **should not be** trusted since the blockchain was not secured at times of producing the transactions.
-
-If the START_BABY_BLOCKCHAIN transaction is received by the baby blockchain, we say that the baby blockchain is *secured*.
-Otherwise, the baby blockchain is not secured.
-Hence, we aim to satisfy the following property:
-- *Liveness:* If the baby and parent blockchain are not censored and the relayer works correctly, then the baby blockchain eventually becomes secured.
 
 ## Function Definitions
 
@@ -137,7 +143,7 @@ func onAcknowledgePacket (
 
 ```golang
 // executed at the parent blockchain to handle the timeout of the IBC packet
-func inAcknowledgePacket (
+func onTimeoutPacket (
   packet: Packet) {
   // the packet is of StartBabyBlockchainPacket type
   assert(packet.type = StartBabyBlockchainPacket)
@@ -200,7 +206,7 @@ func onRecvPacket (
 
 ## Correctness Arguments
 
-If the baby and the parent blockchains are not censored and the relayer works correctly, then a channel between two blockchains will eventually be established.
-Moreover, the *StartBabyBlockchainPacket* packet is eventually received by the baby blockchain.
-Hence, the baby blockchain (at that moment) leaves its "Initialization" mode and starts its normal operation.
-Lastly, the baby blockchain is secured at this moment.s
+The baby blockchain safety property is ensured because of the fact that the parent blockchain has bonded validators of the baby blockchain at the moment of sending the *StartBabyBlockchainPacket* packet.
+The baby blockchain liveness property is ensured since eventually the *StartBabyBlockchainPacket* packet is indeed received by the baby blockchain.
+The parent blockchain safety holds since the *allowValidatorSetChanges* variable is modified at the moment of receiving the *StartBabyBlockchainPacket* acknowledgment.
+Lastly, the parent blockchain liveness holds since the *StartBabyBlockchainPacket* acknowledgment is eventually received by the parent blockchain.
