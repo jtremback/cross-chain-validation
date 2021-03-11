@@ -1,4 +1,4 @@
-# Initialization
+# Initialization - Draft for Discussion
 
 ## Introduction
 
