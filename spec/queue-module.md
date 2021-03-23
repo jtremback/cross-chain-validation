@@ -3,7 +3,7 @@
 ## Introduction
 
 This document presents a technical specification of the **queue module**.
-The queue module contains a logic necessary for implementing shared FIFO queue among two parties (i.e., two blockchains) - one producer and one consumer.
+The queue module contains a logic necessary for implementing shared FIFO queue among two parties (i.e., two blockchains).
 Therefore, in an implementation of the FIFO queue we are interested in, the following entities take place:
   - Two blockchains: Each validator of each blockchain implements its queue module.
   - IBC communication: There exists an IBC communication among two aforementioned blockchains.
@@ -11,6 +11,20 @@ Therefore, in an implementation of the FIFO queue we are interested in, the foll
 
 ### Shared FIFO Queue Specification
 
+Our shared FIFO queue - denoted by Q - is a concurrent object.
+It exposes the following interface:
+- *enqueue(x)* operation: Operation that enqueues the element *x* to Q.
+- *dequeue()* operation: Operation that dequeues the first element of Q and returns that element.
+- *peak()* operation: Operation that returns the first element of Q without removing it.
+- *contains(x)* operation: Operation that returns whether the element *x* belongs to *Q*.
+
+We set the following constraint:
+No party (i.e., blockchain) invokes an operation before the previously invoked operation is completed.
+
+Lastly, our implementation satisfies the **sequential consistency** correctness criterium:
+The result of any execution is the same as if the operations of all the processes were executed in some sequential order, and the operations of each individual process appear in this sequence in the order specified by its protocol.
+
+<!---
 Our shared FIFO queue - denoted by Q - is a concurrent object.
 We define its sequential alphabet of operations and denote it by *As*.
 The sequential alphabet *As* is the set of enqueue, dequeue and peak operation: *As = {enqueue(x) | x in X} union {dequeue(x) | x in X} union {peak(x) | x in X}*, where *X* is the set of elements that could be enqueued into the queue.
@@ -34,10 +48,16 @@ A concurrent history *hc* is **linearizable** if it can be extended (by adding z
 1) if there exists a linearization *hs* of *hc* such that *hs* is valid, and
 2) precedence of events in *hc* is respected in *hs*.
 
+
+We assume that only the producer blockchain invokes enqueue operations, whereas only the consumer blockchain invokes dequeue operations.
+Both blockchains could invoke peak operations.
+Lastly, no blockchain invokes an operation before the previously invoked one is completed.
+
 Now, we define a set of valid sequential histories of Q.
 Elements are enqueued in the same way they are dequeued.
 Peak operation always returns the first element enqueued that has not yet been dequeued.
 Exceptionally, a dequeue/peak operation returns *nil* if the queue is empty at the time of the dequeue/peak operation, i.e., every element which gets enqueued before this time was also dequeued before this time.
+--->
 
 ### Closer Look at the IBC Channels
 
@@ -51,24 +71,19 @@ A relayer intermediates communication between the two blockchains. Each blockcha
 ## High-Level Design of the Shared FIFO Queue
 
 In this section, we provide an intuition behind our protocol.
+Since parties (i.e., blockchains) in our model are assumed to be reliable, we choose arbitrarily one party to be *the leader*.
+The leader plays a role of a "server", i.e., it orders all requests and provides replies.
+Hence, the protocol is quite simple.
 
-The parent blockchain maintains a single queue data structure named *FrozenStakeQueue*.
-On the other hand, the baby blockchain maintains two queue data structures: *ValidatorSetChangeQueue* and *UnbondingQueue*.
-We now explain how all three queues are put to use in our protocol.
+The leader maintains a copy of the shared FIFO queue Q.
+Whenever any blockchain invokes an operation, it simply sends an IBC packet that encapsulates the invoked operation to the leader.
+The leader simply processes the requests in the order in which the requests are received and provides the replies.
 
-- Parent blockchain: The parent blockchain keeps track of each validator set change it sent to the baby blockchain in its *FrozenStakeQueue* data structure.
-Whenever the parent blockchain issues a request for a change of the validator set of the baby blockchain, it first freezes the stake of the proposed validators and note this change in its queue (note that this is done by the staking module prior to invoking the *changeValidatorSet* function; see the rest of the document).
-Once the baby blockchain advises the parent blockchain that a specific validator set change should be "free to take its stake" (which we explain in the rest of the document), the parent blockchain simply dequeues this entry from its *FrozenStakeQueue* and "removes" a "stake lock" associated with this validator set change.
-Once no "stake locks" are present and associated with a specific validator, the validator is allowed to take back its money.
+### Correctness Arguments
 
-- Baby blockchain: Once the baby blockchain receives (in the form of an IBC packet) a validator set change demand from the parent blockchain, it first enqueues the demand in its *ValidatorSetChangeQueue*.
-The reason for this is that, while executing a single block of transactions, there could be multiple validator set change demands received from the parent blockchain.
-In order for the baby blockchain to "apply" them all, the baby blockchain needs to "remember" those validator set change demands and its order (which is done via the *ValidatorSetChangeQueue* queue).
-
-On the other hand, whenever the validator set of the baby blockchain is modified, the "old" validator set should start unbonding.
-That is why we use the *UnbondingQueue* queue.
-Namely, whenever the validator set of the baby blockchain is modified, we enqueue to *UnbondingQueue* the sequence number of the validator set change demand that was **last** applied in order to obtain the old (i.e., changed) validator set.
-Once the unbonding period elapses for the validator set, the appropriate entry is removed from the *UnbondingQueue* queue and the appropriate IBC packet is sent to the parent blockchain.
+First, we note that each operation eventually completes as long as the relayer process works correctly.
+Second, since the leader is a "source of order", we note that any execution is mapped into a valid sequential one (determined by the leader).
+Hence, the sequential consistency criterium is satisfied.
 
 ## Data Structures
 
@@ -76,35 +91,258 @@ We devote this section to defining the data structures used to represent the sta
 
 ### Application data
 
-#### Parent blockchain
+#### Non-leader blockchain
 
-- *FrozenStakeQueue*: Keeps track of frozen stake of validators.
 - Outcoming data store: "Part" of the blockchain observable for the relayer. Namely, each packet written in outcoming data store will be relayed by the relayer.
 
-#### Baby blockchain
+#### Leader blockchain
 
-- *UnbondingQueue*: Keeps track of validators that are currently unbonding.
-- Validator set: The validator set of the baby blockchain.
-- Sequence number: The sequence number of the **last** change validator set demand that influenced the current validator set of the baby blockchain.
-- *ValidatorSetChangeQueue*: Keeps track of all demands of the parent blockchain for a change of the validator set of the baby blockchain in a current block.
+- Requests: Queue of requests.
+- Q: Local copy of the shared FIFO queue.
+- Number: Map <Element, Integer> that takes note of how many instances of a specific element is present in the local copy of Q.
 - Outcoming data store: "Part" of the blockchain used for storing the packets that should be relayed to the parent blockchain (same as at the parent blockchain).
 
 ### Packet data
 
-#### Sent by the parent blockchain
+#### Sent by the non-leader blockchain
 
-- ChangeValidatorSet(validatorSet, seqNum): Packet sent by the parent blockchain to the baby blockchain to express the demand of the parent blockchain to modify the validator set of the baby blockchain.
-Validator set modifications are defined in the *valSetUpdate* parameter, whereas the *seqNum* represents the unique identifier of the demand.
+- OperationPacket: Packet sent by the non-leader blockchain to the leader blockchain and encapsulates an invoked operation.
+More specifically, the packet has three parameters: 1) a unique identifier of the operation (can be blockchain id + sequence number), 2) type of the operation, and 3) a potential parameter (can be null).
 
-  *Remark:* There exists the acknowledgment packet for the ChangeValidatorSet packet. However, currently the acknowledgment packet does not influence any state transitions (as we introduce in the rest of the document).
+*Remark:* There exists the default acknowledgment packet for the OperationPacket.
 
-#### Sent by the baby blockchain
+#### Sent by the leader blockchain
 
-- UnbondingOver(seqNum): Packet sent by the baby blockchain to signalize that the unbonding period has elapsed at the baby blockchain for every validator that is demanded in the *ChangeValidatorSet* packets with sequence number equal to *seqNum*.
+- ResultPacket: Packet sent by the leader blockchain to the non-leader blockchain and encapsulates a result of a corresponding invoked operation.
+More specifically, the packet contains: 1) the identifier of the corresponding operation, and 2) the result of the operation.
 
-  *Remark:* There exists the acknowledgment packet for the UnbondingOver packet. However, currently the acknowledgment packet does not influence any state transitions (as we introduce in the rest of the document).
+*Remark:* There exists the default acknowledgment packet for the ResultPacket.
 
+## Implementation
 
+### Non-leader
+
+```golang
+func enqueue(x: Element) {
+  // create the OperationPacket packet
+  OperationPacket packet = OperationPacket{uniqueOperationId, "enqueue", x}
+
+  // obtain the destination port of the consumer
+  destPort = getPort(leaderId)
+
+  // send the packet
+  handler.sendPacket(Packet{timeoutHeight, timeoutTimestamp, destPort, destChannel, sourcePort, sourceChannel, packet}, getCapability("port"))
+}
+```
+
+- Expected precondition
+  - None
+- Expected postcondition
+  - The OperationPacket is created
+- Error condition
+  - If the precondition is violated
+
+```golang
+func dequeue() {
+  // create the OperationPacket packet
+  OperationPacket packet = OperationPacket{uniqueOperationId, "dequeue", null}
+
+  // obtain the destination port of the consumer
+  destPort = getPort(leaderId)
+
+  // send the packet
+  handler.sendPacket(Packet{timeoutHeight, timeoutTimestamp, destPort, destChannel, sourcePort, sourceChannel, packet}, getCapability("port"))
+}
+```
+
+- Expected precondition
+  - None
+- Expected postcondition
+  - The OperationPacket is created
+- Error condition
+  - If the precondition is violated
+
+```golang
+func peak() {
+  // create the OperationPacket packet
+  OperationPacket packet = OperationPacket{uniqueOperationId, "peak", null}
+
+  // obtain the destination port of the consumer
+  destPort = getPort(leaderId)
+
+  // send the packet
+  handler.sendPacket(Packet{timeoutHeight, timeoutTimestamp, destPort, destChannel, sourcePort, sourceChannel, packet}, getCapability("port"))
+}
+```
+
+- Expected precondition
+  - None
+- Expected postcondition
+  - The OperationPacket is created
+- Error condition
+  - If the precondition is violated
+
+```golang
+func contains(x: ELement) {
+  // create the OperationPacket packet
+  OperationPacket packet = OperationPacket{uniqueOperationId, "contains", x}
+
+  // obtain the destination port of the consumer
+  destPort = getPort(leaderId)
+
+  // send the packet
+  handler.sendPacket(Packet{timeoutHeight, timeoutTimestamp, destPort, destChannel, sourcePort, sourceChannel, packet}, getCapability("port"))
+}
+```
+
+- Expected precondition
+  - None
+- Expected postcondition
+  - The OperationPacket is created
+- Error condition
+  - If the precondition is violated
+
+### Leader
+
+```golang
+func enqueue(x: Element) {
+  // create the request
+  Request req = Request{selfId, uniqueOperationId, "enqueue", x}
+
+  // enqueue the request
+  Requests.enqueue(req)
+}
+```
+
+- Expected precondition
+  - None
+- Expected postcondition
+  - The request is enqueued to the Requests queue
+- Error condition
+  - If the precondition is violated
+
+```golang
+func dequeue() {
+  // create the request
+  Request req = Request{selfId, uniqueOperationId, "dequeue", null}
+
+  // enqueue the request
+  Requests.enqueue(req)
+}
+```
+
+- Expected precondition
+  - None
+- Expected postcondition
+  - The request is enqueued to the Requests queue
+- Error condition
+  - If the precondition is violated
+
+```golang
+func peak() {
+  // create the request
+  Request req = Request{selfId, uniqueOperationId, "peak", x}
+
+  // enqueue the request
+  Requests.enqueue(req)
+}
+```
+
+- Expected precondition
+  - None
+- Expected postcondition
+  - The request is enqueued to the Requests queue
+- Error condition
+  - If the precondition is violated
+
+```golang
+func contains(x: Element) {
+  // create the request
+  Request req = Request{selfId, uniqueOperationId, "contains", x}
+
+  // enqueue the request
+  Requests.enqueue(req)
+}
+```
+
+- Expected precondition
+  - None
+- Expected postcondition
+  - The request is enqueued to the Requests queue
+- Error condition
+  - If the precondition is violated
+
+```golang
+func onRecvPacket(packet: Packet) {
+  // the packet is of EnqueuePacket type
+  assert(packet.type = OperationPacket)
+
+  // create the request
+  Request req = createRequest(packet)
+
+  // enqueue the request
+  Requests.enqueue(req)
+
+  // construct the default acknowledgment
+  ack = defaultAck(OperationPacket)
+  return ack
+}
+```
+
+- Expected precondition
+  - The packet is sent to the leader by the non-leader blockchain
+  - The packet is of *OperationPacket* type
+- Expected postcondition
+  - The request is enqueued to the Requests queue
+- Error condition
+  - If the precondition is violated
+
+```golang
+// signalizes that the Requests queue is not empty and gives the first request
+func requestToProcess(Request req) {
+  // apply the request to the local copy of Q
+  res = Q.apply(req)
+
+  // complete the operation
+  if (req.source == selfId) {
+    completeTheRequest(req.id, res)
+  } else {
+    // create the ResultPacket packet
+    ResultPacket result = ResultPacket{req.id, res}
+
+    // obtain the destination port of the consumer
+    destPort = getPort(req.source)
+
+    // send the packet
+    handler.sendPacket(Packet{timeoutHeight, timeoutTimestamp, destPort, destChannel, sourcePort, sourceChannel, packet}, getCapability("port"))
+  }
+}
+```
+
+- Expected precondition
+  - The Requests queue is not empty
+- Expected postcondition
+  - The operation takes effect in the local copy of Q
+  - The corresponding operation is completed or a corresponding ResultPacket is created
+- Error condition
+  - If the precondition is violated
+
+<!---
+## Correctness Arguments
+
+First, we note that each operation eventually completes as long as the relayer process works correctly.
+Hence, we simply need to prove our implementation "maps" any execution into a valid sequential one.
+
+We set the following serialization points for each operation:
+- Enqueue operation serializes right after the moment the customer blockchain increments the number of occurrences of the received element.
+- Contain operation serializes right after the moment the function returns.
+- Dequeue operation serializes right after the moment the producer blockchain decrements the number of occurrences of the received element.
+- Peak operation serializes right after the moment the function returns.
+
+Because of the assumption that new operations are not invoked before the previously invoked operations are completed, we conclude that any two enqueue/contain and dequeue/peak pairs of operations could be ordered (since they can are invoked by a single blockchain).
+Because of the choice of serialization points, we conclude the following:
+- Any two enqueue/dequeue operations are ordered.
+<!---
 ## Transitions
 
 In this section, we informally discuss the state transitions that occur in our protocol.
@@ -184,7 +422,7 @@ func finishUnbonding(time)
 **Remark.** The staking module of the baby chain needs to take care of a queue *validatorSetChangeQueue* which is used to store observed change validator set demands.
 This queue is manipulated using *sizeValidatorSetChangeQueue()* to retrieve the size of the queue, *dequeueValidatorSetChange()* and *queueValidatorSetChange(valSet, seqNum)* to dequeue and queue the *validatorSetChange* queue, respectively.
 -->
-
+<!---
 ### Parent blockchain
 
 This subsection will present the functions executed at the parent blockchain.
@@ -545,3 +783,4 @@ Since the *UnbondingOver* packet is resent until the packet is received by the p
 Note that we assume a single baby blockchain per a parent blockchain.
 However, the protocol itself allows that a single parent blockchain takes care of multiple baby blockchains.
 The only difference would be that the parent blockchain takes care of each "cross-chain validation"-related parameter **per** baby blockchain (i.e., the sequence numbers for the change validator set demands would be **per** baby blockchain, the "stake freezing" logic would be **per** baby blockchain, etc.).
+--->
