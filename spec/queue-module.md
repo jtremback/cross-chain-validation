@@ -327,6 +327,20 @@ func requestToProcess(Request req) {
 - Error condition
   - If the precondition is violated
 
+## Alternative Specification
+
+In this section, we provide an alternative specification for the FIFO queue.
+Specifically, we do not demand that all operations are linearizable.
+In the rest of the subsection, we pose the following constraints:
+- Enqueue operation is invoked only by the parent blockchain.
+- Dequeue and peak operations are invoked only by the baby blockchain.
+- Each element can be enqueued and dequeued at most once.
+
+Enqueue, dequeue and peak operations are linearizable.
+However, the contains operation behaves in the following manner:
+Let *contains(x)* invoked by the baby blockchain return *true* and let another *contains(x)* operation invoked by the parent blockchain return *false*.
+Then, *dequeue()* operation that returns *x* has "completed at the parent blockchain" before the *contains(x)* operation is invoked by the parent blockchain.
+
 <!---
 ## Correctness Arguments
 
