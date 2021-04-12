@@ -291,6 +291,35 @@ We only need to show that the blockchain that has invoked A does the same.
 Because of the fact that A causally precedes B, we conclude that at the moment of the observation of A by the B-invoking blockchain, A was already executed at the blockchain that invoked A.
 Hence, B is only executed after A at this blockchain, which concludes the argument.
 
+## Generalization
+
+In this subsection, we generalize the approach presented above to multiple blockchains.
+
+### System model
+
+Consider a set of N blockchains such that every two blockchains are connected via an ordered IBC channel.
+Moreover, we assume that each blockchain can invoke all operations.
+
+### Modification of the approach given above
+
+Since now we have multiple blockchain, we introduce vector clocks in order to capture the causal precedence of write operations.
+A vector clock is simply an array of N elements (one per each blockchain) and it is associated with each write operation of each blockchain.
+For example, suppose that write operation A invoked by a blockchain B is associated with vector clock V.
+Let V[C] = x.
+This simply means that operation A is invoked **after** B had observed an x-th write operation issued by blockchain C.
+Hence, A operation is causally preceded by first x write operations issued by C.
+
+We compare vector clocks using the "<=" relation:
+For any two vector clocks V, V', V <= V' if and only if, for every index i, V[i] <= V'[i].
+
+Now we explain the modification in detail.
+Each blockchain maintains a local current vector clock V (initialized to all 0s).
+Once a blockchain issues an operation, it associates a vector clock W with the operation, such that W[self] is a sequence number of the write operation and W[i] = V[i], for every i != self.
+
+Lastly, once a blockchain receives an IBC packet about a write operation, it does not process this operation until W' <= V, where W' represents the vector clock associated with the received operation.
+Lastly, local vector clock is updated after each new operation is processed.
+Namely, once operation O issued by blockchain B is processed, the vector clock V is updated in the following manner: V[B] = V[B] + 1 and V[i] remains unchanged, for every i != B.
+
 <!----
 ### Non-leader
 
