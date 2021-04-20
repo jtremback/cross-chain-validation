@@ -1,33 +1,75 @@
 ------------- MODULE CrossChainValidation_draft_001 ---------------
 
-EXTENDS Integers, FiniteSets, Sequences
+EXTENDS Integers, Sequences
 
-CONSTANTS ChannelIDs, \* set of channelIDs
-          ChainIDs, \* set of chainIDs
-          ValidatorIDs, \* set of validatorIDs
-          ParentValidators, \* set of validatorIDs of validators at the parent
-          MaxChangeValidatorSeqNum, \* integer
-          ValidatorSetSequence \* sequence of length MaxChangeValidatorSeqNum, 
-                               \* storing validator sets for each sequence number
+CONSTANTS 
+    \* @type: Set(Str);
+    ChannelIDs, \* set of channelIDs
+    \* @type: Set(Str);
+    ChainIDs, \* set of chainIDs
+    \* @type: Set(Str);
+    ValidatorIDs, \* set of validatorIDs
+    \* @type: Set(Str);
+    ParentValidators, \* set of validatorIDs of validators at the parent
+    \* @type: Int;
+    MaxChangeValidatorSeqNum, \* integer
+    \* @type: Seq(Set(Str));
+    ValidatorSetSequence \* sequence of length MaxChangeValidatorSeqNum, 
+                         \* storing validator sets for each sequence number
 
-VARIABLES \* parent variables
-          parentNextSeqNum, \* a sequence number of the next set of parent validators 
-                            \* to be processed as validators of the baby, Int 
-          parentUnfrozenSeqNums, \* set of sequence numbers, which are smaller than parentNextSeqNum,
-                                 \* identifying validator sets whose stake is unfrozen, {Int}
-          \* baby variables
-          babyValidatorSet, \* validator set of the baby blockchain, ValidatorIDs
-          babySeqNum, \* sequence number of the last change validator set demand, Int
-          babyUnbonding, \* set of sequence numbers identifying validator sets that are currently unbonding, {Int}
-          babyValSetChanges, \* set of sequence numbers of validator set change demands, {Int}
-          babyLastUnbondedSeqNum, \* sequence number of the last validator set that unbonded on the baby blockchain, Int
-          \* shared variables
-          packetCommitments, \* a set of packet commitments for each chain, [Chains -> Packets]
-          haltProtocol, \* a flag that stores whether the protocol halted due to a timeout and closure of ordered channels, BOOL
-          \* events simulating a relayer
-          parentPendingEvents, \* pending events of the parent blockchain, Seq(Events)
-          babyPendingEvents, \* pending events of the baby blockchain, Seq(Events)
-          upcomingEvent \* current event to be processed, Events
+(* @typeAlias: PACKETDATA = 
+    [
+        type: Str,
+        validatorSet: Set(Str),
+        Set(Int)
+    ];
+*)
+(* @typeAlias: PACKET = 
+    [
+        srcChannel: Str,
+        dstChannel: Str,
+        data: PACKETDATA
+    ];
+*)
+(* @typeAlias: EVENT =
+    [
+        packet: PACKET,
+        function: str,
+        chain: Str
+    ];
+*)
+
+VARIABLES 
+    \* parent variables
+    \* @type: Int;
+    parentNextSeqNum, \* a sequence number of the next set of parent validators 
+                      \* to be processed as validators of the baby, Int 
+    \* @type: Set(Int);
+    parentUnfrozenSeqNums, \* set of sequence numbers, which are smaller than parentNextSeqNum,
+                           \* identifying validator sets whose stake is unfrozen, {Int}
+    \* baby variables
+    \* @type: Set(Str);
+    babyValidatorSet, \* validator set of the baby blockchain, ValidatorIDs
+    \* @type: Int;
+    babySeqNum, \* sequence number of the last change validator set demand, Int
+    \* @type: Set(Int);
+    babyUnbonding, \* set of sequence numbers identifying validator sets that are currently unbonding, {Int}
+    \* @type: Set(Int);
+    babyValSetChanges, \* set of sequence numbers of validator set change demands, {Int}
+    \* @type: Int;
+    babyLastUnbondedSeqNum, \* sequence number of the last validator set that unbonded on the baby blockchain, Int
+    \* shared variables
+    \* @type: Str -> Set(PACKET);
+    packetCommitments, \* a set of packet commitments for each chain, [Chains -> Packets]
+    \* @type: Bool;
+    haltProtocol, \* a flag that stores whether the protocol halted due to a timeout and closure of ordered channels, BOOL
+    \* events simulating a relayer
+    \* @type: Seq(EVENT);
+    parentPendingEvents, \* pending events of the parent blockchain, Seq(Events)
+    \* @type: Seq(EVENT);
+    babyPendingEvents, \* pending events of the baby blockchain, Seq(Events)
+    \* @type: EVENT;
+    upcomingEvent \* current event to be processed, Events
           
 
 (*************************** Definitions **************************)
@@ -45,6 +87,7 @@ vars == <<parentNextSeqNum, parentUnfrozenSeqNums,
 
 Max(S) == CHOOSE x \in S : \A y \in S : x >= y 
 
+\* @type: Set(PACKETDATA);
 CrossChainValidationPacketData == [
     type : {"ChangeValidatorSet"},
     validatorSet : SUBSET (AllValidators),
@@ -54,12 +97,14 @@ CrossChainValidationPacketData == [
     seqNum : SeqNums
 ]
 
+\* @type: Set(PACKET);
 Packets == [
     srcChannel : ChannelIDs,
     dstChannel : ChannelIDs,
     data : CrossChainValidationPacketData
 ]          
 
+\* @type: Set(Str);
 Functions == 
     {"ChangeValidatorSet", "OnRecvPacket"} 
     (*
@@ -67,6 +112,7 @@ Functions ==
         \union {"OnPacketAck"}
     *)
         
+\* @type: Set(EVENT);
 Events == [
     packet : Packets,
     function : Functions,
@@ -75,6 +121,7 @@ Events == [
     
 (**************************** Operators ***************************)
     
+\* @type: (PACKET) => Str;
 GetReceiverChain(packet) ==
     IF packet.dstChannelID = "parentChannel"
     THEN "parent"
@@ -128,7 +175,7 @@ CreateAndSendUnbondingOverPackets(chain, seqNum) ==
         packet |-> packet,
         function |-> "OnTimeoutPacket",
         chain |-> "baby"
-    ]
+    ] IN
 
     \* send packet (or timeout TODO)
     /\ packetCommitments' = [packetCommitments EXCEPT ![chain] = @ \union {packet}]
@@ -156,8 +203,6 @@ SendChangeValSetPacket(chain, packet) ==
     \* non-deterministically add timeout packet event to parent chain
     /\ parentPendingEvents' \in {parentPendingEvents, Append(parentPendingEvents, timeoutEvent)}
 
-
-
 (* Staking module *)
 UnfreezeStake(chain, seqNum) ==
     /\ chain = "parent"
@@ -181,7 +226,6 @@ FinishUnbonding(matureSeqNum) ==
        /\ CreateAndSendUnbondingOverPackets("baby", matureSeqNum)
        /\ babyLastUnbondedSeqNum' = matureSeqNum
     \/ UNCHANGED babyLastUnbondedSeqNum \* TODO 
-
 
 AddValidatorSetChange(chain, packet) ==
     /\ chain = "baby"
@@ -415,9 +459,7 @@ ProtocolStep ==
                
     \* endBlock function at baby chain
     \/ ExecuteEndBlockBaby
-
-
-
+    
 Init ==
     \* parent variables
     /\ parentNextSeqNum = 1
@@ -514,4 +556,5 @@ ValidatorSetIsEventuallyUnbonded ==
         [](parentNextSeqNum = seqNum
             => <>(\/ babyLastUnbondedSeqNum >= seqNum - 1
                   \/ haltProtocol))
+
 ===================================================================
