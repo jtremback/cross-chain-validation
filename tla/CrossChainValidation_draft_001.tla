@@ -1,6 +1,6 @@
 ------------- MODULE CrossChainValidation_draft_001 ---------------
 
-EXTENDS Integers, Sequences
+EXTENDS Integers, FiniteSets, Sequences
 
 CONSTANTS 
     \* @type: Set(Str);
@@ -16,28 +16,6 @@ CONSTANTS
     \* @type: Seq(Set(Str));
     ValidatorSetSequence \* sequence of length MaxChangeValidatorSeqNum, 
                          \* storing validator sets for each sequence number
-
-(* @typeAlias: PACKETDATA = 
-    [
-        type: Str,
-        validatorSet: Set(Str),
-        Set(Int)
-    ];
-*)
-(* @typeAlias: PACKET = 
-    [
-        srcChannel: Str,
-        dstChannel: Str,
-        data: PACKETDATA
-    ];
-*)
-(* @typeAlias: EVENT =
-    [
-        packet: PACKET,
-        function: str,
-        chain: Str
-    ];
-*)
 
 VARIABLES 
     \* parent variables
@@ -59,11 +37,32 @@ VARIABLES
     \* @type: Int;
     babyLastUnbondedSeqNum, \* sequence number of the last validator set that unbonded on the baby blockchain, Int
     \* shared variables
+    (* @typeAlias: PACKETDATA = 
+        [
+            type: Str,
+            validatorSet: Set(Str),
+            seqNum: Int
+        ];
+    *)
+    (* @typeAlias: PACKET = 
+        [
+            srcChannel: Str,
+            dstChannel: Str,
+            data: PACKETDATA
+        ];
+    *)
     \* @type: Str -> Set(PACKET);
     packetCommitments, \* a set of packet commitments for each chain, [Chains -> Packets]
     \* @type: Bool;
     haltProtocol, \* a flag that stores whether the protocol halted due to a timeout and closure of ordered channels, BOOL
     \* events simulating a relayer
+    (* @typeAlias: EVENT =
+        [
+            packet: PACKET,
+            function: Str,
+            chain: Str
+        ];
+    *)
     \* @type: Seq(EVENT);
     parentPendingEvents, \* pending events of the parent blockchain, Seq(Events)
     \* @type: Seq(EVENT);
@@ -78,7 +77,10 @@ SeqNums == 1 .. MaxChangeValidatorSeqNum
 AllValidators == ValidatorIDs
 
 NullChainID == "none"
-NullEvent == "none"
+NullChannelID == "none"
+NullPacketData == [type |-> "none"]
+NullPacket == [srcChannel |-> NullChannelID, dstChannel |-> NullChannelID, data |-> NullPacketData]
+NullEvent == [packet |-> NullPacket, function |-> "none", chain |-> NullChainID]
 
 vars == <<parentNextSeqNum, parentUnfrozenSeqNums,
           babyUnbonding, babyValidatorSet, babySeqNum, babyValSetChanges, babyLastUnbondedSeqNum,
@@ -227,6 +229,7 @@ FinishUnbonding(matureSeqNum) ==
        /\ babyLastUnbondedSeqNum' = matureSeqNum
     \/ UNCHANGED babyLastUnbondedSeqNum \* TODO 
 
+\* @type: (Str, PACKET) => Bool;
 AddValidatorSetChange(chain, packet) ==
     /\ chain = "baby"
     \* this is an abstraction of the English spec -- 
@@ -359,7 +362,7 @@ OnPacketAck ==
     /\ upcomingEvent.function \in "OnPacketAck"
     /\ upcomingEvent.packet \in packetCommitments[upcomingEvent.chain]
     \* remove packet commitment on acknowledgement
-    /\ packetCommitments' = [packetCommitments EXCEPT ![upcomingEvent.chain] = @ \ {upcomingEvent.packet}]
+    /\ packetCommitments' = [packetCommitments EXCEPT ![upcomingEvent.chain] = packetCommitments[upcomingEvent.chain] \ {upcomingEvent.packet}]
     /\ UNCHANGED <<>> \* TODO 
 *)
 
