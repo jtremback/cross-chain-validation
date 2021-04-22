@@ -112,6 +112,108 @@ More specifically, the packet has three parameters: 1) a unique identifier of th
 
 ## Implementation
 
+### Port & channel setup
+
+The `setup` function must be called exactly once when the module is created
+to bind to the appropriate port.
+
+```golang
+func setup() {
+  capability = routingModule.bindPort("cross-chain staking", ModuleCallbacks{
+    onChanOpenInit,
+    onChanOpenTry,
+    onChanOpenAck,
+    onChanOpenConfirm,
+    onChanCloseInit,
+    onChanCloseConfirm,
+    onRecvPacket,
+    onTimeoutPacket,
+    onAcknowledgePacket,
+    onTimeoutPacketClose
+  })
+  claimCapability("port", capability)
+}
+```
+
+Once the `setup` function has been called, channels can be created through the IBC routing module
+between instances of the cross-chain staking modules on mother and daughter chains.
+
+##### Channel lifecycle management
+
+Mother and daughter chains accept new channels from any module on another machine, if and only if:
+
+- The channel being created is ordered.
+- The version string is `icsXXX`.
+
+```golang
+func onChanOpenInit(
+  order: ChannelOrder,
+  connectionHops: [Identifier],
+  portIdentifier: Identifier,
+  channelIdentifier: Identifier,
+  counterpartyPortIdentifier: Identifier,
+  counterpartyChannelIdentifier: Identifier,
+  version: string) {
+  // only ordered channels allowed
+  abortTransactionUnless(order === ORDERED)
+  // assert that version is "icsXXX"
+  abortTransactionUnless(version === "icsXXX")
+}
+```
+
+```golang
+func onChanOpenTry(
+  order: ChannelOrder,
+  connectionHops: [Identifier],
+  portIdentifier: Identifier,
+  channelIdentifier: Identifier,
+  counterpartyPortIdentifier: Identifier,
+  counterpartyChannelIdentifier: Identifier,
+  version: string,
+  counterpartyVersion: string) {
+  // only ordered channels allowed
+  abortTransactionUnless(order === ORDERED)
+  // assert that version is "icsXXX"
+  abortTransactionUnless(version === "icsXXX")
+  abortTransactionUnless(counterpartyVersion === "icsXXX")
+}
+```
+
+```golang
+func onChanOpenAck(
+  portIdentifier: Identifier,
+  channelIdentifier: Identifier,
+  version: string) {
+  // port has already been validated
+  // assert that version is "icsXXX"
+  abortTransactionUnless(version === "icsXXX")
+}
+```
+
+```golang
+func onChanOpenConfirm(
+  portIdentifier: Identifier,
+  channelIdentifier: Identifier) {
+  // accept channel confirmations, port has already been validated, version has already been validated
+}
+```
+
+```golang
+func onChanCloseInit(
+  portIdentifier: Identifier,
+  channelIdentifier: Identifier) {
+  // the channel is closing, do we need to punish?
+}
+```
+
+```golang
+func onChanCloseConfirm(
+  portIdentifier: Identifier,
+  channelIdentifier: Identifier) {
+  // the channel is closed, do we need to punish?
+}
+```
+
 ### The parent blockchain
 
 ```golang
