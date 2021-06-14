@@ -1,4 +1,4 @@
-# Cross-Chain Verification (CCV)
+# Cross-Chain Validation (CCV)
 
 ## System Model
 
