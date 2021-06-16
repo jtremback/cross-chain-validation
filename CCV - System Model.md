@@ -1,8 +1,6 @@
-# Cross-Chain Validation (CCV)
+# System Model
 
-## System Model
-
-### Blockchains
+## Blockchains
 
 A *blockchain* is a tamper-proof distributed sequence of *blocks*.
 A block is a sequence of transactions.
@@ -18,7 +16,7 @@ A validator is a tuple (id, power), where id represents a unique identifier of a
 A *validator set* is a set of validators such that no two validators have the same id.
 Morevoer, a *validator set update* is a validator set and it is used to describe changes to a validator set.
 
-### Setup
+## Setup
 
 We consider two blockchains: blockchain *parent* and blockchain *baby*.
 These blockchains are able to communicate over an ordered IBC channel.
@@ -30,7 +28,7 @@ Moreover, once the channel fail, it never restores to the active state.
 
 If the channel never fails, we say that the channel is forever-active.
 
-## Problem Definition
+# Problem Definition
 
 The CCV module exposes the following interface:
 - Request \<ChangeValidatorSet, ValidatorSetUpdate update\>: demands that the validator set of the baby blockchain reflects update; invoked only by the parent blockchain.
@@ -39,7 +37,7 @@ The CCV module exposes the following interface:
 
 We assume that no two identical <ChangeValidatorSet> operations are invoked.
 
-### Properties
+## Properties
 
 Now, we define the properties of the CCV module:
 
