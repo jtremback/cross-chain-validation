@@ -31,7 +31,7 @@ If the channel never fails, we say that the channel is forever-active.
 # Problem Definition
 
 The CCV module exposes the following interface:
-- Request \<ChangeValidatorSet, ValidatorSetUpdate update\>: demands that the validator set of the baby blockchain reflects update; invoked only by the parent blockchain.
+- Request \<ChangeValidatorSet, ValidatorSetUpdate update\>: demands that the validator set of the baby blockchain reflects update; invoked only by the registry of the parent blockchain.
 - Indication \<MatureUpdate, ValidatorSetUpdate update\>: indicates that update has matured; triggered only on the parent blockchain.
 - Indication \<ValidatorSetUpdate, ValidatorSetUpdate update\>: indicates that update should be applied to the validator set; triggered only on the baby blockchain.
 
