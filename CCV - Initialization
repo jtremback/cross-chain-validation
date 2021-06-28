@@ -1,0 +1,101 @@
+# Initialization
+
+This documents tackles the initialization part of the cross-chain validation (CCV) protocol.
+Namely, we need to ensure that (1) parent blockchain communicates with baby blockchain, (2) baby blockchain communicates with parent blockchain, and (3) these two blockchains communicate via single channel.
+
+We start by properly defining the properties of the initialization subprotocol.
+Then, we provide the pseudocode and prove its correctness.
+
+## Problem Definition
+
+We assume that babyChain denotes the baby blockchain the parent blockchain wants to validate.
+Similarly, parentChain denotes the parent blockchain which validates the baby blockchain, from the perspective of the baby blockchain.
+
+The initialization exposes the following interface:
+- Indication <Terminate, blockchain, channel>: the initialization subprotocol terminates.
+
+We ensure the following properties:
+- **Parent Safety:** If <Terminate, blockchain, channel> is triggered at parent blockchain, then blockchain = babyChain.
+
+- **Baby Safety:** If <Terminate, blockchain, channel> is triggered at baby blockchain, then blockchain = parentChain.
+
+- **Channel Safety:** If <Terminate, blockchain, channel> is triggered at parent blockchain and <Terminate, blockchain, channel'> is triggered at baby blockchain, then channel = channel'.
+
+- **No duplication:** Neither blockchain triggers the indication more than once.
+
+- **Liveness:** Each blockchain eventually triggers <Terminate, blockchain, channel>.
+
+## Protocol
+
+### Parent Blockchain
+
+```
+upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty counterparty, String version, String counterpartyVersion>:
+    // validate parameters
+    if (!validate(order, portId, channelId, version, counterpartyVersion)):
+        trigger <error>
+
+    // create the channel
+    Channel channel = new Channel(portId, channelId, counterparty)
+    channel.setStatus(initializing)
+
+    // get the client
+    client = getClient(channelId)
+
+    // verify consensus state
+    verifyState(client, initialValidatorSetBaby)
+
+    // verify whether there exist other channels for the baby chain
+    if (!channelToBaby.isEmpty()):
+        return <error>
+```
+
+```
+upon <OnChanOpenConfirm, String portId, String channelId>:
+    // Verify that no other channel for CCV is open
+    prevChannel = getChannel(babyId)
+    if (prevChannel != nil):
+        prevChannel.close()
+        trigger <error>
+
+    setChannel(babyId, channelId)
+    setStatus(channelId, "VALIDATING")
+    trigger <Terminate, blockchain, channel>
+```
+
+### Baby Blockchain
+
+```
+upon <OnChanOpenInit, Order order, String portId, String channelId, Counterparty counterparty, String version:
+    // validate parameters
+    if (!validate(order, portId, channelId, version)):
+        trigger <error>
+
+    // create new channel
+    Channel channel = new Channel(portId, channelId, counterparty)
+
+    // set the status to initializing
+    channel.setStatus = "INIT"
+```
+
+- Expected precondition
+    - Handshake started
+- Expected postcondition
+    - New channel with "INIT" status created
+- Error condition
+    - None
+
+```
+upon <OnChanOpenAck, String portId, String channelId, String counterpartyversion>:
+    if counterpartyversion != expectedVersion: 
+        trigger <error>    
+    
+    trigger <Terminate, parentChain, getChannel(channelId)>
+```
+
+- Expected precondition
+    - Handshake started
+- Expected postcondition
+    - If versions match, then the baby blockchain triggers <Terminate, blockchain, channel>
+- Error condition
+    - None
