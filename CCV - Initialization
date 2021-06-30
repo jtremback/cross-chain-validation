@@ -16,15 +16,15 @@ The initialization exposes the following interface:
 
 We ensure the following properties:
 
-- **Parent Safety:** If <Open, channel> is triggered at parent blockchain, then channel is a channel between the parent and baby blockchain.
+- **Parent Safety:** If <Open, channel> is triggered at parent blockchain, then channel is a channel between the parent and baby blockchain. [satisfied if the parent blockchain is "valid"]
 
-- **Baby Safety:** If <Open, channel> is triggered at baby blockchain, then channel is a channel between the parent and baby blockchain.
+- **Baby Safety:** If <Open, channel> is triggered at baby blockchain, then channel is a channel between the parent and baby blockchain. [satisfied if the baby blockchain is "valid"]
 
-- **Channel Safety:** If <Open, channel> is triggered at parent blockchain and <Open, channel'> is triggered at baby blockchain, these channel = channel'.
+- **Channel Safety:** If <Open, channel> is triggered at parent blockchain and <Open, channel'> is triggered at baby blockchain, these channel = channel'.  [satisfied if both blockchains are "valid"]
 
-- **No Duplication:** A blockchain triggers <Open, channel> at most once.
+- **No Duplication:** A blockchain triggers <Open, channel> at most once. [satisfied if the blockchain is "valid"]
 
-- **Liveness:** A blockchain eventually triggers <Open, channel>.
+- **Liveness:** A blockchain eventually triggers <Open, channel>. [satisfied if both blockchains are "valid"]
 
 ## Protocol
 
@@ -78,7 +78,7 @@ upon <OnChanOpenConfirm, String portId, String channelId>:
     ccvChannel.setStatus("VALID")
 
     // terminate
-    trigger <Terminate, blockchain, ccvChannel>
+    trigger <Open, ccvChannel>
 ```
 
 - Expected precondition
@@ -129,7 +129,7 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 - Expected precondition
     - Handshake is started for establishing a channel
 - Expected postcondition
-    - blockchain triggers <Terminate, blockchain, ccvChannel>
+    - blockchain triggers <Open, ccvChannel>
 - Error condition
     - None
 
@@ -137,10 +137,11 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 
 - **Parent Safety:** This property is satisfied because the underlying client is the one expected and the consensus state of the baby blockchain is verified.
 
-- **Baby Safety:** 
+- **Baby Safety:** ?
 
-- **Channel Safety:**
+- **Channel Safety:** ?
 
-- **No Duplication:** A blockchain triggers <Open, channel> at most once.
+- **No Duplication:** On the parent blockchain, the property is ensured because of the check whether there already exists a ccv channel.
+On the baby blockchain, the property is ensured since the baby blockchain does not initiate a handshake before the previous one is completed.
 
-- **Liveness:** A blockchain eventually triggers <Open, channel>.
+- **Liveness:** Ensured since eventually the handshake is completed.
