@@ -76,5 +76,7 @@ Now, we define the properties of the CCV module:
 - **Liveness - Parent:** Let <ChangeValidatorSet, update> be invoked.
 If the channel and both blockchains are forever-active, then eventually <MatureUpdate, update> is triggered.
 
+> "forever-active" means that no packet times out. That is there is an active relayer. If a validator wants liveness, then it should run a relayer.
+
 - **Liveness - Baby:** Let <ChangeValidatorSet, update> be invoked.
 If the channel and both blockchains are forever-active, then eventually <ValidatorSetUpdate, update> is triggerred.
