@@ -1,6 +1,6 @@
 # Protocol
 
-This document provides the pseudocode of the CCV protocol.
+This document provides the specification of the CCV protocol.
 
 ## Data Structures
 
