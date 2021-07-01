@@ -47,7 +47,7 @@ This implies that the channel never transits to the closed state.
 
 Another important point is that the state of the IBC channel could be "enforced" to become open-active at any time.
 Namely, whether the channels transfers packets from one blockchain to another depends on the **relayer**.
-If the relayer works properly, the packets are successfully transffered.
+If the relayer works properly, the packets are successfully transferred.
 Importantly, any validator could play the role of the relayer, which ensures that the channel can transit into open-active state at any time (if there exists a validator that aims to successfully relay packets). 
 
 # Problem Definition
