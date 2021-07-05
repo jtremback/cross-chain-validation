@@ -119,6 +119,13 @@ upon <OnChanOpenInit, Order order, String portId, String channelId, Counterparty
 
 ```
 upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion>:
+    // check if this is the first acknowledged channel
+    if (alreadyAcknowledged):
+        triger <error>
+
+    // the first acknowledged channel
+    alreadyAcknowledged = true
+
     // check the version of the counterparty
     if (counterpartyVersion != expectedVersion): 
         trigger <error>    
@@ -137,11 +144,11 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 
 - **Parent Safety:** This property is satisfied because the underlying client is the one expected and the consensus state of the baby blockchain is verified.
 
-- **Baby Safety:** ?
+- **Baby Safety:** This property is a consequence of the constantly updated light client of the parent blockchain on the baby blockchain.
 
-- **Channel Safety:** ?
+- **Channel Safety:** This property comes from the fact that the handshake process is done for channels that are started by the baby blockchain.
 
-- **No Duplication:** On the parent blockchain, the property is ensured because of the check whether there already exists a ccv channel.
-On the baby blockchain, the property is ensured since the baby blockchain does not initiate a handshake before the previous one is completed.
+- **No Duplication:** On the parent blockchain, the property is ensured because of the check about the existence of potentially confirmed ccv channel.
+On the baby blockchain, the property is ensured by the fact that just a single channel passes the "alreadyAcknowledged" check.
 
 - **Liveness:** Ensured since eventually the handshake is completed.
