@@ -62,12 +62,14 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
         trigger <error>
 ```
 
-- Expected precondition
-    - Handshake is started for establishing a channel
-- Expected postcondition
-    - A channel(portId, channelId) is created; its status is set to "INITIALIZING"
-- Error pcondition
-    - None
+- **Initiator:** Relayer.
+- **Expected precondition:** 
+    - ChanOpenTry datagram committed on the blockchain.
+- **Expected postcondition:**
+    - A channel is created; its status is set to "INITIALIZING".
+    - A consensus state of the baby blockchain is verified againts its initial validator set.
+- **Error condition:** 
+    - If the precondition is violated.
 
 ```
 upon <OnChanOpenConfirm, String portId, String channelId>:
@@ -87,13 +89,13 @@ upon <OnChanOpenConfirm, String portId, String channelId>:
     trigger <Open, ccvChannel>
 ```
 
-- Expected precondition
-    - Handshake is started for establishing a channel
-- Expected postcondition
-    - ccvChannel variable is updated with a channel for CCV; status set to "VALID"
-    - blockchain triggers <Terminate, blockchain, ccvChannel>
--Error condition
-    - None
+- **Initiator:** Relayer.
+- **Expected precondition:** 
+    - ChanOpenConfirm datagram committed on the blockchain.
+- **Expected postcondition:**
+    - If this is the first OnChanOpenConfirm callback invoked, the paren blockchain terminates the initialization protocol with this channel (it sets its status to "VALID"); otherwise, the callback is ignored.
+- **Error condition:** 
+    - If the precondition is violated.
 
 ### Baby Blockchain
 
@@ -117,14 +119,11 @@ upon <OnChanOpenInit, Order order, String portId, String channelId, Counterparty
 ```
 - **Initiator:** CCV module on the baby blockchain.
 - **Expected precondition:** 
-    - 
-
-- Expected precondition
-    - Handshake is started for establishing a channel
-- Expected postcondition
-    - A channel(portId, channelId) is created; its status is set to "INITIALIZING"
-- Error condition
-    - None
+    - Connection among two blockchains has already been established.
+- **Expected postcondition:**
+    - A channel is created; its status is set to "INITIALIZING".
+- **Error condition:** 
+    - If the precondition is violated.
 
 ```
 upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion>:
@@ -141,13 +140,13 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
     
     trigger <Terminate, parentChain, getChannel(channelId)>
 ```
-
-- Expected precondition
-    - Handshake is started for establishing a channel
-- Expected postcondition
-    - blockchain triggers <Open, ccvChannel>
-- Error condition
-    - None
+- **Initiator:** Relayer.
+- **Expected precondition:** 
+    - ChanOpenAck datagram committed on the blockchain.
+- **Expected postcondition:**
+    - If this is the first OnChanOpenAck callback invoked, the baby blockchain terminates the initialization protocol with this channel; otherwise, the callback is ignored.
+- **Error condition:** 
+    - If the precondition is violated.
 
 ## Correctness Arguments
 
@@ -160,4 +159,4 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 - **No Duplication:** On the parent blockchain, the property is ensured because of the check about the existence of potentially confirmed ccv channel.
 On the baby blockchain, the property is ensured by the fact that just a single channel passes the "alreadyAcknowledged" check.
 
-- **Liveness:** Ensured since eventually the handshake is completed.
+- **Liveness:** Ensured since the handshake is eventually completed.
