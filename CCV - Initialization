@@ -66,7 +66,7 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
     - Handshake is started for establishing a channel
 - Expected postcondition
     - A channel(portId, channelId) is created; its status is set to "INITIALIZING"
-- Error pcondition
+- Error condition
     - None
 
 ```
