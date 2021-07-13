@@ -2,7 +2,7 @@
 
 ## Blockchains
 
-A *blockchain* is a tamper-proof distributed sequence of *blocks*.
+A *blockchain* is a tamper-proof distributed sequence of *blocks* (see [Light Client Specification](https://github.com/tendermint/spec/blob/master/spec/light-client/verification/verification_002_draft.md#part-i---tendermint-blockchain)).
 A block is a sequence of transactions.
 Each block of a blockchain is *verified* by a set of pre-determined *full nodes*.
 Moreover, each block defines a set of full nodes that have the responsibility to verify the next block in the sequence.

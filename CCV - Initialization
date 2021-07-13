@@ -28,6 +28,12 @@ We ensure the following properties:
 
 ## Protocol
 
+### Prerequisites
+
+This subsection presents the state of both chains we assume at the start of the initialization subprotocol.
+There exists a light client on the baby blockchain that follows the parent blockchain (denoted by BABY_LIGHT_CLIENT) and there exists a light client on the parent blockchain that follows the baby blockchain (denoted by PARENT_LIGHT_CLIENT).
+We assume that both light clients are updated, i.e., they contain the initial consensus state of the corresponding blockchain.
+
 ### Parent Blockchain
 
 ```
@@ -109,6 +115,9 @@ upon <OnChanOpenInit, Order order, String portId, String channelId, Counterparty
     (client != expectedClient):
         trigger <error>
 ```
+- **Initiator:** CCV module on the baby blockchain.
+- **Expected precondition:** 
+    - 
 
 - Expected precondition
     - Handshake is started for establishing a channel
