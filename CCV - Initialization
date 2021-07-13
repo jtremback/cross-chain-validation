@@ -62,6 +62,7 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
         trigger <error>
 ```
 
+<<<<<<< HEAD
 - **Initiator:** Relayer.
 - **Expected precondition:** 
     - ChanOpenTry datagram committed on the blockchain.
@@ -70,6 +71,14 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
     - A consensus state of the baby blockchain is verified againts its initial validator set.
 - **Error condition:** 
     - If the precondition is violated.
+=======
+- Expected precondition
+    - Handshake is started for establishing a channel
+- Expected postcondition
+    - A channel(portId, channelId) is created; its status is set to "INITIALIZING"
+- Error condition
+    - None
+>>>>>>> 05f5fa74de80232ada415671731dc39e6dd30947
 
 ```
 upon <OnChanOpenConfirm, String portId, String channelId>:
@@ -159,4 +168,8 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 - **No Duplication:** On the parent blockchain, the property is ensured because of the check about the existence of potentially confirmed ccv channel.
 On the baby blockchain, the property is ensured by the fact that just a single channel passes the "alreadyAcknowledged" check.
 
+<<<<<<< HEAD
 - **Liveness:** Ensured since the handshake is eventually completed.
+=======
+- **Liveness:** Ensured since eventually the handshake is completed.
+>>>>>>> 05f5fa74de80232ada415671731dc39e6dd30947
