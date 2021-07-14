@@ -20,9 +20,7 @@ We ensure the following properties:
 
 - **Baby Safety:** If <Open, channel> is triggered at baby blockchain, then channel is a channel between the parent and baby blockchain. [satisfied if the baby blockchain is "valid"]
 
-- **Channel Safety:** If <Open, channel> is triggered at parent blockchain and <Open, channel'> is triggered at baby blockchain, these channel = channel'.  [satisfied if both blockchains are "valid"]
-
-- **No Duplication:** A blockchain triggers <Open, channel> at most once. [satisfied if the blockchain is "valid"]
+- **No Duplication:** There is no more than one channel open between two blockchains. [satisfied if the blockchain is "valid"]
 
 - **Liveness:** A blockchain eventually triggers <Open, channel>. [satisfied if both blockchains are "valid"]
 
@@ -32,7 +30,6 @@ We ensure the following properties:
 
 This subsection presents the state of both chains we assume at the start of the initialization subprotocol.
 There exists a light client on the baby blockchain that follows the parent blockchain (denoted by BABY_LIGHT_CLIENT) and there exists a light client on the parent blockchain that follows the baby blockchain (denoted by PARENT_LIGHT_CLIENT).
-We assume that both light clients are updated, i.e., they contain the initial consensus state of the corresponding blockchain.
 
 ### Parent Blockchain
 
@@ -65,6 +62,7 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
 - **Initiator:** Relayer.
 - **Expected precondition:** 
     - ChanOpenTry datagram committed on the blockchain.
+    - PARENT_LIGHT_CLIENT is updated.
 - **Expected postcondition:**
     - A channel is created; its status is set to "INITIALIZING".
     - A consensus state of the baby blockchain is verified againts its initial validator set.
@@ -92,6 +90,7 @@ upon <OnChanOpenConfirm, String portId, String channelId>:
 - **Initiator:** Relayer.
 - **Expected precondition:** 
     - ChanOpenConfirm datagram committed on the blockchain.
+    - PARENT_LIGHT_CLIENT is updated.
 - **Expected postcondition:**
     - If this is the first OnChanOpenConfirm callback invoked, the paren blockchain terminates the initialization protocol with this channel (it sets its status to "VALID"); otherwise, the callback is ignored.
 - **Error condition:** 
@@ -143,6 +142,7 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 - **Initiator:** Relayer.
 - **Expected precondition:** 
     - ChanOpenAck datagram committed on the blockchain.
+    - BABY_LIGHT_CLIENT is updated.
 - **Expected postcondition:**
     - If this is the first OnChanOpenAck callback invoked, the baby blockchain terminates the initialization protocol with this channel; otherwise, the callback is ignored.
 - **Error condition:** 
@@ -154,9 +154,6 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 
 - **Baby Safety:** This property is a consequence of the constantly updated light client of the parent blockchain on the baby blockchain.
 
-- **Channel Safety:** This property comes from the fact that the handshake process is done for channels that are started by the baby blockchain.
-
-- **No Duplication:** On the parent blockchain, the property is ensured because of the check about the existence of potentially confirmed ccv channel.
-On the baby blockchain, the property is ensured by the fact that just a single channel passes the "alreadyAcknowledged" check.
+- **No Duplication:** The property is ensured by the fact that just a single channel passes the "alreadyAcknowledged" check.
 
 - **Liveness:** Ensured since the handshake is eventually completed.
