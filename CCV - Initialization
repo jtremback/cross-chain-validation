@@ -11,6 +11,13 @@ Then, we provide the pseudocode and prove its correctness.
 We assume that babyChain denotes the baby blockchain the parent blockchain wants to validate.
 Similarly, parentChain denotes the parent blockchain which validates the baby blockchain, from the perspective of the baby blockchain.
 
+### Light Client
+
+We assume that a light client (BABY_LIGHT_CLIENT and PARENT_LIGHT_CLIENT) expose the following functions:
+- VerifyChannelState(ClientState clientState, Height height, CommitmentPrefix prefix, CommitmentProof proof, Identifier portIdentifier, Identifier channelIdentifier, ChannelEnd channelEnd) - verifies a proof of the channel state of the specified channel end, under the specified port, stored on the target machine. For more details, see [Light Client Specification](https://github.com/cosmos/ibc/tree/master/spec/core/ics-002-client-semantics).
+
+### Problem Definition
+
 The initialization exposes the following interface:
 - Indication <Open, channel>: channel is open.
 
@@ -58,14 +65,18 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
     if (ccvChannelBaby != nil):
         trigger <error>
 ```
-ßs
+
 - **Initiator:** Relayer.
 - **Expected precondition:** 
     - ChanOpenTry datagram committed on the blockchain.
-    - PARENT_LIGHT_CLIENT is updated.
+    - PARENT_LIGHT_CLIENT.VerifyChannelState(connection, height, connection.counterpartyPrefix, proof, portId, channelId, channelEnd) = true, where (see [Connection Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-003-connection-semantics) and [Channel Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-004-channel-and-packet-semantics)):
+        - connection is the corresponding connection of the channel being established,
+        - height is the height of the CommitmentProof,
+        - proof is the CommitmentProof. 
 - **Expected postcondition:**
     - A channel is created; its status is set to "INITIALIZING".
     - A consensus state of the baby blockchain is verified againts its initial validator set.
+    - PARENT_LIGHT_CLIENT.UpdateClientState(PARENT_LIGHT_CLIENT.state, header), where header is the received header used to prove the "ChanOpenTry" commitment.
 - **Error condition:** 
     - If the precondition is violated.
 
@@ -90,9 +101,13 @@ upon <OnChanOpenConfirm, String portId, String channelId>:
 - **Initiator:** Relayer.
 - **Expected precondition:** 
     - ChanOpenConfirm datagram committed on the blockchain.
-    - PARENT_LIGHT_CLIENT is updated.
+    - PARENT_LIGHT_CLIENT.VerifyChannelState(connection, height, connection.counterpartyPrefix, proof, portId, channelId, channelEnd) = true, where (see [Connection Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-003-connection-semantics) and [Channel Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-004-channel-and-packet-semantics)):
+        - connection is the corresponding connection of the channel being established,
+        - height is the height of the CommitmentProof,
+        - proof is the CommitmentProof.
 - **Expected postcondition:**
     - If this is the first OnChanOpenConfirm callback invoked, the paren blockchain terminates the initialization protocol with this channel (it sets its status to "VALID"); otherwise, the callback is ignored.
+    - PARENT_LIGHT_CLIENT.UpdateClientState(PARENT_LIGHT_CLIENT.state, header), where header is the received header used to prove the "ChanOpenConfirm" commitment.
 - **Error condition:** 
     - If the precondition is violated.
 
@@ -142,9 +157,13 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 - **Initiator:** Relayer.
 - **Expected precondition:** 
     - ChanOpenAck datagram committed on the blockchain.
-    - BABY_LIGHT_CLIENT is updated.
+    - BABY_LIGHT_CLIENT.VerifyChannelState(connection, height, connection.counterpartyPrefix, proof, portId, channelId, channelEnd) = true, where (see [Connection Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-003-connection-semantics) and [Channel Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-004-channel-and-packet-semantics)):
+        - connection is the corresponding connection of the channel being established,
+        - height is the height of the CommitmentProof,
+        - proof is the CommitmentProof.
 - **Expected postcondition:**
     - If this is the first OnChanOpenAck callback invoked, the baby blockchain terminates the initialization protocol with this channel; otherwise, the callback is ignored.
+    - BABY_LIGHT_CLIENT.UpdateClientState(BABY_LIGHT_CLIENT.state, header), where header is the received header used to prove the "ChanOpenAck " commitment.
 - **Error condition:** 
     - If the precondition is violated.
 
