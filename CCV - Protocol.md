@@ -39,11 +39,13 @@ This section defines the data structures used to represent the state of the baby
 upon <ChangeValidatorSet, ValidatorSetUpdate update>:
     pendingChanges.append(update)
 ```
-- Expected precondition
+
+- **Initiator**: Application on the parent blockchain.
+- **Expected precondition:**
     - CCV channel among two blockchains has already been established.
-- Expected postcondition
+- **Expected postcondition:**
     - The update is appended to the pendingChanges.
-- Error condition
+- **Error condition:**
     - None.
 
 ```
@@ -63,13 +65,15 @@ upon <EndBlock>:
     // send the packet
     sendPacket(babyId, packet)
 ```
-- Expected precondition
+
+- **Initiator:** Automicatically initiated at the end of each block.
+- **Expected precondition:**
     - EndBlock method is invoked.
-- Expected postcondition
+- **Expected postcondition:**
     - If pendingChanges is not empty, then the ChangeValidatorSet packet with the updates from pendingChanges is created.
     - If pendingChanges is not empty, then pendingChanges are added into unbondingChanges.
     - If pendingChanges is not empty, then pendingChanges is emptied.
-- Error condition
+- **Error condition:**
     - If the precondition is violated.
 
 ```
@@ -84,14 +88,16 @@ upon <OnAcknowledgementPacket, ValidatorSetUpdatePacket packet>:
     for each update in packet.updates:
         trigger <MatureUpdate, update>
 ```
-- Expected precondition
+
+- **Initiator:** Relayer
+- **Expected precondition:**
     - packet is acknowledged.
-- Expected postcondition
+- **Expected postcondition:**
     - PARENT_LIGHT_CLIENT.ClientUpdated() = true; Note that it is possible for PARENT_LIGHT_CLIENT.ClientUpdated() to return false. If that is the case, then PARENT_LIGHT_CLIENT.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of PARENT_LIGHT_CLIENT.ClientUpdated() returns true.
     - unbondValidators(packet.updates) is invoked.
     - packet.updates are removed from unbondingChanges.
     - for each update in packet.updates, \<MatureUpdate, update\> is triggered.
-- Error condition
+- **Error condition:**
     - If the precondition is violated.
 
 ### Baby Blockchain
@@ -105,13 +111,15 @@ upon <OnRecvPacket, ValidatorSetUpdate packet>:
     unbondingTime = blockTime().Add(UnbondingPeriod)
     unbondingTime.add(packet, unbondingTime)
 ```
-- Expected precondition
+
+- **Initiator:** Relayer
+- **Expected precondition:**
     - Packet datagram is committed on the blockchain.
     - BABY_LIGHT_CLIENT.ClientUpdated() = true; Note that it is possible for BABY_LIGHT_CLIENT.ClientUpdated() to return false. If that is the case, then BABY_LIGHT_CLIENT.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of BABY_LIGHT_CLIENT.ClientUpdated() returns true.
-- Expected postcondition
+- **Expected postcondition:**
     - packet.updates are appended to pendingChanges.
     - (packet, unbondingTime) is added to unbondingTime, where unbondingTime = UnbondingPeriod + blockTime().
-- Error condition
+- **Error condition:**
     - If the precondition is violated.
 
 
@@ -128,11 +136,13 @@ function <UnbondMaturePackets>:
         else:
             break
 ```
-- Expected precondition
+
+- **Initiator:** <EndBlock> function
+- **Expected precondition:**
     - <EndBlock> is triggered.
-- Expected postcondition
+- **Expected postcondition:**
     - for each (packet, unbondingTime) where currentTime >= unbondingTime, packet is acknowledged and the tuple is removed from unbondingTime.
-- Error condition
+- **Error condition:**
     - If the precondition is violated.
 
 ```
@@ -149,13 +159,15 @@ upon <EndBlock>:
     for each update in changes:
         trigger <ValidatorSetUpdate, update>
 ```
-- Expected precondition
+
+- **Initiator:** Automicatically initiated at the end of each block.
+- **Expected precondition:**
     - EndBlock method is invoked.
-- Expected postcondition
+- **Expected postcondition:**
     - for every update in pendingChanges, <ValidatorSetUpdate, update> is triggered.
     - pendingChanges is emptied.
     - UnbondMaturePackets() function is invoked.
-- Error condition
+- **Error condition:**
     - If the precondition is violated.
 
 ## Correctness
