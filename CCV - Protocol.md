@@ -4,7 +4,7 @@ This document provides the specification of the CCV protocol.
 
 ## Light Client
 
-We assume that a light client (BABY_LIGHT_CLIENT and PARENT_LIGHT_CLIENT) expose the following methods:
+We assume that a light client (PARENT_LIGHT_CLIENT_ON_BABY and BABY_LIGHT_CLIENT_ON_PARENT) expose the following methods:
 
 - ClientUpdate(Header header): void - updates the client with the header.
 
@@ -93,7 +93,7 @@ upon <OnAcknowledgementPacket, ValidatorSetUpdatePacket packet>:
 - **Expected precondition:**
     - packet is acknowledged.
 - **Expected postcondition:**
-    - PARENT_LIGHT_CLIENT.ClientUpdated() = true; Note that it is possible for PARENT_LIGHT_CLIENT.ClientUpdated() to return false. If that is the case, then PARENT_LIGHT_CLIENT.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of PARENT_LIGHT_CLIENT.ClientUpdated() returns true.
+    - BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() = true; Note that it is possible for BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() to return false. If that is the case, then BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() returns true.
     - unbondValidators(packet.updates) is invoked.
     - packet.updates are removed from unbondingChanges.
     - for each update in packet.updates, \<MatureUpdate, update\> is triggered.
@@ -115,7 +115,7 @@ upon <OnRecvPacket, ValidatorSetUpdate packet>:
 - **Initiator:** Relayer
 - **Expected precondition:**
     - Packet datagram is committed on the blockchain.
-    - BABY_LIGHT_CLIENT.ClientUpdated() = true; Note that it is possible for BABY_LIGHT_CLIENT.ClientUpdated() to return false. If that is the case, then BABY_LIGHT_CLIENT.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of BABY_LIGHT_CLIENT.ClientUpdated() returns true.
+    - PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() = true; Note that it is possible for PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() to return false. If that is the case, then PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() returns true.
 - **Expected postcondition:**
     - packet.updates are appended to pendingChanges.
     - (packet, unbondingTime) is added to unbondingTime, where unbondingTime = UnbondingPeriod + blockTime().

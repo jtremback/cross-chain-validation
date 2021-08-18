@@ -71,15 +71,16 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
         trigger <error>
 ```
 
-TODO: Add clarification for what "last" indeed means!
-TODO: Emphasize the fact that OnChanInit has been executed on the baby blockchain.
-TODO: The relayer sends a client update and the client applies it.
-TODO: BABY_LIGHT_CLIENT_ON_PARENT rename to "BABY_LIGHT_CLIENT_ON_PARENT" (or something similar).
-TODO: Baby client state and chain state -> put it as a predicate (the proofs will reveal what we indeed need to emphasize regarding the predicate).
+<!-- TODO: Add clarification for what "last" indeed means! -->
+<!-- TODO: Emphasize the fact that OnChanInit has been executed on the baby blockchain. -->
+<!-- TODO: The relayer sends a client update and the client applies it. -->
+<!-- TODO: BABY_LIGHT_CLIENT_ON_PARENT rename to "BABY_LIGHT_CLIENT_ON_PARENT" (or something similar). -->
+<!-- TODO: Baby client state and chain state -> put it as a predicate (the proofs will reveal what we indeed need to emphasize regarding the predicate). -->
 - **Initiator:** Relayer.
 - **Expected precondition:** 
+    - OnChanOpenInit has been executed on the baby blockchain.
     - ChanOpenTry datagram committed on the blockchain.
-    - BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() = true; Note that it is possible for BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() to return false. If that is the case, then BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdate(header) is invoked, where header is the  header of the latest height of the baby blockchain, which does ensure that the next call of BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() returns true.
+    - BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() = true; Note that it is possible for BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() to return false. If that is the case, then BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdate(header) is invoked, where header is the  header of the latest height of the baby blockchain as seen from the perspective of the relayer, which does ensure that the next call of BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() returns true.
     - BABY_LIGHT_CLIENT_ON_PARENT.VerifyChannelState(connection, height, connection.counterpartyPrefix, proof, portId, channelId, channelEnd) = true, where (see [Connection Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-003-connection-semantics) and [Channel Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-004-channel-and-packet-semantics)):
         - connection is the corresponding connection of the channel being established,
         - height is the height of the CommitmentProof,
@@ -110,8 +111,9 @@ upon <OnChanOpenConfirm, String portId, String channelId>:
 
 - **Initiator:** Relayer.
 - **Expected precondition:** 
+    - OnChanOpenAck has been executed on the baby blockchain.
     - ChanOpenConfirm datagram committed on the blockchain.
-    - BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() = true; Note that it is possible for BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() to return false. If that is the case, then BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdate(header) is invoked, where header is the header of the latest height of the baby blockchain, which does ensure that the next call of BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() returns true.
+    - BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() = true; Note that it is possible for BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() to return false. If that is the case, then BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdate(header) is invoked, where header is the header of the latest height of the baby blockchain as seen from the perspective of the relayer, which does ensure that the next call of BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() returns true.
     - BABY_LIGHT_CLIENT_ON_PARENT.VerifyChannelState(connection, height, connection.counterpartyPrefix, proof, portId, channelId, channelEnd) = true, where (see [Connection Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-003-connection-semantics) and [Channel Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-004-channel-and-packet-semantics)):
         - connection is the corresponding connection of the channel being established,
         - height is the height of the CommitmentProof,
@@ -166,8 +168,9 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 ```
 - **Initiator:** Relayer.
 - **Expected precondition:** 
+    - OnChanOpenTry has been executed on the parent blockchain.
     - ChanOpenAck datagram committed on the blockchain.
-    - PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() = true; Note that it is possible for PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() to return false. If that is the case, then PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() returns true.
+    - PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() = true; Note that it is possible for PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() to return false. If that is the case, then PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain as seen from the perspective of the relayer, which does ensure that the next call of PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() returns true.
     - PARENT_LIGHT_CLIENT_ON_BABY.VerifyChannelState(connection, height, connection.counterpartyPrefix, proof, portId, channelId, channelEnd) = true, where (see [Connection Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-003-connection-semantics) and [Channel Semantics](https://github.com/cosmos/ibc/tree/master/spec/core/ics-004-channel-and-packet-semantics)):
         - connection is the corresponding connection of the channel being established,
         - height is the height of the CommitmentProof,
