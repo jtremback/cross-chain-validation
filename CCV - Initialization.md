@@ -10,6 +10,7 @@ Then, we provide the pseudocode and prove its correctness.
 
 We assume that babyChain denotes the baby blockchain the parent blockchain wants to validate.
 Similarly, parentChain denotes the parent blockchain which validates the baby blockchain, from the perspective of the baby blockchain.
+Finally, we assume that the parent blockchain eventually sends a validator set update to the baby blockchain.
 
 ### Light Client
 
@@ -93,13 +94,6 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
 
 ```
 upon <OnChanOpenConfirm, String portId, String channelId>:
-    // verify that there does not exist a CCV channel
-    if (ccvChannelBaby != nil):
-        // if there is, make it invalid and close it
-        ccvChannel.setStatus("INVALID")
-        ccvChannel.close()
-        trigger <error>
-    
     // update the channel
     ccvChannel = getChannel(channelId)
     // make it valid
@@ -153,18 +147,16 @@ upon <OnChanOpenInit, Order order, String portId, String channelId, Counterparty
 
 ```
 upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion>:
-    // check if this is the first acknowledged channel
-    if (alreadyAcknowledged):
-        triger <error>
+    // check whether there already exists the channel
+    channel = getParentChannel();
 
-    // the first acknowledged channel
-    alreadyAcknowledged = true
+    // the channel already exists
+    if (channel):
+        trigger <error>
 
     // check the version of the counterparty
     if (counterpartyVersion != expectedVersion): 
-        trigger <error>    
-    
-    trigger <Terminate, parentChain, getChannel(channelId)>
+        trigger <error>
 ```
 - **Initiator:** Relayer.
 - **Expected precondition:** 
@@ -180,12 +172,47 @@ upon <OnChanOpenAck, String portId, String channelId, String counterpartyVersion
 - **Error condition:** 
     - If the precondition is violated.
 
+For the sake of completeness, we insert the \<OnRecvPacket\> callback from [Protocol part](https://github.com/informalsystems/cross-chain-validation/blob/6abd0a947cef9faf1bb16f3a9971a559549d5712/CCV%20-%20Protocol.md) of the specification.
+
+```
+upon <OnRecvPacket, ValidatorSetUpdate packet>:
+    Channel channel = packet.getDestinationChannel();
+    // check whether the status of channel is "VALIDATING"
+    if (channel.status != "VALIDATING"):
+        // set status to "VALIDATING"
+        channel.setStatus("VALIDATING")
+        
+        // set the channel as the parent channel
+        setParentChannel(channel)
+
+        // terminate the initialization protocol
+        trigger <Open, channel>
+
+    // store the updates from the packet
+    pendingChanges.append(packet.updates)
+
+    // calculate and store the unbonding time for the packet
+    unbondingTime = blockTime().Add(UnbondingPeriod)
+    unbondingTime.add(packet, unbondingTime)
+```
+
+- **Initiator:** Relayer
+- **Expected precondition:**
+    - Packet datagram is committed on the blockchain.
+    - PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() = true; Note that it is possible for PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() to return false. If that is the case, then PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() returns true.
+- **Expected postcondition:**
+    - packet.updates are appended to pendingChanges.
+    - (packet, unbondingTime) is added to unbondingTime, where unbondingTime = UnbondingPeriod + blockTime().
+- **Error condition:**
+    - If the precondition is violated.
+
 ## Correctness Arguments
 
 - **Parent Safety:** This property is satisfied because the underlying client is the one expected and the consensus state of the baby blockchain is verified.
 
 - **Baby Safety:** This property is a consequence of the constantly updated light client of the parent blockchain on the baby blockchain.
 
-- **No Duplication:** The property is ensured by the fact that just a single channel passes the "alreadyAcknowledged" check.
+- **No Duplication:** The property is ensured because the parent blockchain opens a single channel.
+Under the assumption that the parent eventually sends a validator set update via the channel, the baby blockchain terminates upon receiving an update.
 
-- **Liveness:** Ensured since the handshake is eventually completed.
+- **Liveness:** The property holds since the handshake eventually completes and the parent blockchain eventually sends a validator set update to the baby blockchain.

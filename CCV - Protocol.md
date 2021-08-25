@@ -104,6 +104,15 @@ upon <OnAcknowledgementPacket, ValidatorSetUpdatePacket packet>:
 
 ```
 upon <OnRecvPacket, ValidatorSetUpdate packet>:
+    Channel channel = packet.getDestinationChannel();
+    // check whether the status of channel is "VALIDATING"
+    if (channel.status != "VALIDATING"):
+        // set status to "VALIDATING"
+        channel.setStatus("VALIDATING")
+        
+        // set the channel as the parent channel
+        setParentChannel(channel)
+
     // store the updates from the packet
     pendingChanges.append(packet.updates)
 
