@@ -94,6 +94,13 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
 
 ```
 upon <OnChanOpenConfirm, String portId, String channelId>:
+    // check whether the baby channel has not been already established
+    channel = getBabyChannel();
+
+    // the channel already exists
+    if (channel):
+        trigger <error>
+
     // update the channel
     ccvChannel = getChannel(channelId)
     // make it valid
