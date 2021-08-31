@@ -99,12 +99,21 @@ upon <OnChanOpenConfirm, String portId, String channelId>:
 
     // the channel already exists
     if (channel):
+        // set the status to "INVALID"
+        channel.setStatus("INVALID")
+
+        // close the channel
+        channel.close()
+
         trigger <error>
 
     // update the channel
     ccvChannel = getChannel(channelId)
     // make it valid
     ccvChannel.setStatus("VALID")
+
+    // set the channel as baby channel
+    setBabyChannel(ccvChannel)
 
     // terminate
     trigger <Open, ccvChannel>
