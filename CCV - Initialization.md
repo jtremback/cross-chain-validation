@@ -68,7 +68,9 @@ upon <OnChanOpenTry, Order order, String portId, String channelId, Counterparty 
     verifyConsensusState(client, initialValidatorSetBaby)
 
     // verify that there does not exist a CCV channel
-    if (ccvChannelBaby != nil):
+    ccvChannel = getBabyChannel()
+
+    if (ccvChannel):
         trigger <error>
 ```
 
@@ -137,6 +139,13 @@ upon <OnChanOpenConfirm, String portId, String channelId>:
 
 ```
 upon <OnChanOpenInit, Order order, String portId, String channelId, Counterparty counterparty, String version:
+    // check whether there already exists the channel
+    channel = getParentChannel();
+
+    // the channel already exists
+    if (channel):
+        trigger <error>
+
     // validate parameters, i.e., check whether order = "ORDERED", portId is the expected port, version is the expected version
     if (!validate(order, portId, channelId, version)):
         trigger <error>
