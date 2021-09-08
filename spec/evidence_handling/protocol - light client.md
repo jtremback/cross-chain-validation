@@ -121,7 +121,7 @@ func stakingModule.processEvidences(evidences []Evidence)
 - Error condition
   - If the precondition is violated
 
-![image](../images/evidence_handling_1.PNG)
+![image](../images/evidence_handling_1.png)
 
 #### Committed Evidence Scenario
 
@@ -192,4 +192,4 @@ Namely, once the `stakingModule.submitEvidence()` function is invoked, the evide
 <br>However, `stakingModule.produceEvidences()` is invoked while the evidence(s) is still not committed on the parent blockchain.
 Therefore, this function is responsible for ensuring that the evidence(s) are eventually committed and only then the slashing takes place.
 
-![image](../images/evidence_handling_2.PNG)
+![image](../images/evidence_handling_2.png)

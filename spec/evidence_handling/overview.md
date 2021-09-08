@@ -38,8 +38,8 @@ TODO: modify the document once evidence verification on the parent blockchain is
 
 ### Light Client Attack Scenario
 
-![image](../images/evidence_handling.PNG)
+![image](../images/evidence_handling.png)
 
 ### Committed Evidence Scenario
 
-![image](../images/evidence_handling_3.PNG)
+![image](../images/evidence_handling_3.png)

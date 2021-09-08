@@ -42,7 +42,7 @@ Lastly, the full node is capable of transferring its deduction to full nodes of 
 
 #### Subprotocol
 
-![image](../images/evidence_handling.PNG)
+![image](../images/evidence_handling.png)
 
 #### Discussion
 
