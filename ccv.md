@@ -121,8 +121,16 @@ We consider two possible cases:
 ## Safety - Baby:
 `<ValidatorSetUpdate, update>` is not triggered on the baby chain unless `ChangeValidatorSet(update)` has been previously invoked on the parent chain.
 
+### Proof:
+Let `<ValidatorSetUpdate, update>` be triggered. This means that `update` in `pendingChanges`. Hence, `ValidatorSetUpdatePacket` with `update` in `packet.updates` is received. Hence, `ChangeValidatorSet(update)` has been previously invoked.
+
 ## Order Preservation - Baby:
 If `<ValidatorSetUpdate, update>` is triggered before `<ValidatorSetUpdate, update'>`, then `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
+
+### Proof:
+Let `<ValidatorSetUpdate, update>` be triggered before `<ValidatorSetUpdate, update'>`. This means that a `ValdiatorSetUpdatePacket` is received, where `update` in `packet.updates`. Moreover, a `ValdiatorSetUpdatePacket'` is received, where `update'` in `packet'.updates`.
+
+JEHAN'S NOTE: for completeness, this needs some extra analysis of a case where `packet = packet'`, as in `Order Preservation - Parent`
 
 ## Liveness - Parent:
 Let `ChangeValidatorSet(update)` be invoked. If the channel and both blockchains are forever-active, then eventually `<MatureUpdate, update>` is triggered.
