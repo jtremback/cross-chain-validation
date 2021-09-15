@@ -23,9 +23,19 @@ def ChangeValidatorSet(update: ValidatorSetUpdate):
     pendingChanges.add(update)
 ```
 
-NOTE: Epoch?
+**Initiator:** Application on the parent blockchain.
+
+**Expected precondition:**
+- CCV channel among two blockchains has already been established.
+
+**Expected postcondition:**
+- The update is added to the pendingChanges.
+
+**Error condition:**
+- None.
 
 ```python
+# NOTE: How does this work with epochs?
 def OnEndBlock():
     # if pendingUpdates is empty, do nothing
     if pendingUpdates.isEmpty():
@@ -44,6 +54,20 @@ def OnEndBlock():
     pendingChanges.empty()
 ```
 
+**Initiator:** Automicatically initiated at the end of each block.
+
+**Expected precondition:**
+- EndBlock method is invoked.
+
+**Expected postcondition:**
+- If pendingChanges is not empty, then the ChangeValidatorSet packet with the updates from pendingChanges is created.
+- If pendingChanges is not empty, then pendingChanges are added into unbondingChanges.
+- If pendingChanges is not empty, then pendingChanges is emptied.
+
+**Error condition:**
+<!-- NOTE: how can this precondition possibly be violated? -->
+- If the precondition is violated.
+
 ```python
 def OnUnbondingPacket(packet: UnbondingPacket):
     # unbond the stake; JOVAN: do we need to discuss this more since it is important in general, but not relevant to our problem definition
@@ -57,6 +81,21 @@ def OnUnbondingPacket(packet: UnbondingPacket):
         trigger <MatureUpdate, update>
 ```
 
+**Initiator:** Relayer
+
+**Expected precondition:**
+- packet is acknowledged.
+
+**Expected postcondition:**
+- BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() = true; Note that it is possible for BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() to return false. If that is the case, then BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() returns true.
+- unbondValidators(packet.updates) is invoked.
+- packet.updates are removed from unbondingChanges.
+- for each update in packet.updates, <MatureUpdate, update> is triggered.
+
+**Error condition:**
+<!-- NOTE: how can this precondition possibly be violated? -->
+- If the precondition is violated.
+
 # BABY CHAIN
 
 ```python
@@ -64,6 +103,18 @@ def OnValidatorSetUpdatePacket(packet: ValidatorSetUpdatePacket):
     # store the updates from the packet
     pendingChanges.insert(packet.updates)
 ```
+
+**Initiator:** Relayer
+
+**Expected precondition:**
+- Packet datagram is committed on the blockchain.
+- PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() = true; Note that it is possible for PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() to return false. If that is the case, then PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdate(header) is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of PARENT_LIGHT_CLIENT_ON_BABY.ClientUpdated() returns true.
+
+**Expected postcondition:**
+- packet.updates are appended to pendingChanges.
+
+**Error condition:**
+- If the precondition is violated.
 
 ```python
 def OnEndBlock():
@@ -93,6 +144,24 @@ def OnEndBlock():
     pendingChanges.empty()
 ```
 
+**Initiator:** Automicatically initiated at the end of each block.
+
+**Expected precondition:**
+- EndBlock method is invoked.
+
+**Expected postcondition:**
+- for every update in pendingChanges
+    - the chain's validator set is updated
+    - `<ValidatorSetUpdate, update>` is triggered.
+    - `(unbondingTime, updates)` is added to `unbondingTimes`, where `unbondingTime = UnbondingPeriod + blockTime()`.
+- for each (unbondingTime, updates) where currentTime >= unbondingTime
+    - `UnbondingPacket` is sent
+    - the tuple is removed from unbondingTime.
+- pendingChanges is emptied.
+
+**Error condition:**
+- None
+
 
 ## Safety - Parent: 
 `<MatureUpdate, update>` is not triggered unless `ChangeValidatorSet(update)` has been previously invoked.
@@ -106,17 +175,17 @@ If `<ValidatorSetUpdate, update>` is triggered at time `T`, then `<MatureUpdate,
 ### Proof
 Let `<MatureUpdate, update>` be triggered on the parent chain at time `T`. This implies that a `ValidatorSetUpdatePacket` from the parent chain is acknowledged with an `UnbondingPacket` from the baby chain, where `update` in `packet.updates`. Furthermore, this means that `UnbondingPeriod` has elapsed on baby chain between the time that the `ValidatorSetUpdatePacket` was received and the `UnbondingPacket` was sent. 
 
-<!-- JEHAN's note: Not sure what the following sentence adds: Once the first `OnEndBlock` on baby chain is invoked after `ValidatorSetUpdatePacket` is received, `<ValidatorSetUpdate, update>` is triggered; let this time be `T'`. Since `T'` is also the time at which packet is received by the baby blockchain, we conclude that Unbonding Safety is satisfied. -->
+Once the first `OnEndBlock` on baby chain is invoked after `ValidatorSetUpdatePacket` is received, `<ValidatorSetUpdate, update>` is triggered; let this time be `T'`. Since `T'` is also the time at which packet is received by the baby blockchain, we conclude that Unbonding Safety is satisfied.
 
 ## Order Preservation - Parent:
 If `<MatureUpdate, update>` is triggered before `<MatureUpdate, update'>`, then `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
 
 ### Proof:
-Let `<MatureUpdate, update>` be triggered before `<MatureUpdate, update'>`. This means that a `ValidatorSetUpdatePacket` from the parent chain is acknowledged with an `UnbondingPacket` from the baby chain, where `update` in `packet.updates`. Moreover, a `ValidatorSetUpdatePacket'` is acknowledged with an `UnbondingPacket`, where `update'` in `packet'.updates`.
+Let `<MatureUpdate, update>` be triggered before `<MatureUpdate, update'>`. This means that a `ValidatorSetUpdatePacket` from the parent chain is acknowledged with an `UnbondingPacket` from the baby chain, where `update` in `UnbondingPacket.updates`. Moreover, a `ValidatorSetUpdatePacket'` is acknowledged with an `UnbondingPacket'`, where `update'` in `UnbondingPacket'.updates`.
 
 We consider two possible cases:
-- `packet = packet'`: This means that `update` comes before `update'` in `packet.updates`. Hence, `pendingChanges` has update coming before `update'` (because `packet` is "built" out of `pendingChanges`). Thus, `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
-- `packet != packet'`: This means that `packet'` is sent after `packet` (since `ValidatorSetUpdatePacket`s are acknowledged with `UnbondingPacket`s in the order they were sent). Hence, `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')` because of the ordered channel.
+- `UnbondingPacket = UnbondingPacket'`: This means that `update` comes before `update'` in `UnbondingPacket.updates`. Hence, `pendingChanges` has update coming before `update'` (because `UnbondingPacket` is "built" out of `pendingChanges`). Thus, `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
+- `UnbondingPacket != UnbondingPacket'`: This means that `UnbondingPacket'` is sent after `UnbondingPacket` (since `ValidatorSetUpdatePacket`s are acknowledged with `UnbondingPacket`s in the order they were sent). Hence, `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')` because of the ordered channel.
 
 ## Safety - Baby:
 `<ValidatorSetUpdate, update>` is not triggered on the baby chain unless `ChangeValidatorSet(update)` has been previously invoked on the parent chain.
@@ -128,9 +197,7 @@ Let `<ValidatorSetUpdate, update>` be triggered. This means that `update` in `pe
 If `<ValidatorSetUpdate, update>` is triggered before `<ValidatorSetUpdate, update'>`, then `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
 
 ### Proof:
-Let `<ValidatorSetUpdate, update>` be triggered before `<ValidatorSetUpdate, update'>`. This means that a `ValdiatorSetUpdatePacket` is received, where `update` in `packet.updates`. Moreover, a `ValdiatorSetUpdatePacket'` is received, where `update'` in `packet'.updates`.
-
-JEHAN'S NOTE: for completeness, this needs some extra analysis of a case where `packet = packet'`, as in `Order Preservation - Parent`
+Let `<ValidatorSetUpdate, update>` be triggered before `<ValidatorSetUpdate, update'>`. This means that a `ValdiatorSetUpdatePacket` is received, where `update` in `ValdiatorSetUpdatePacket.updates`. Moreover, a `ValdiatorSetUpdatePacket'` is received, where `update'` in `ValdiatorSetUpdatePacket'.updates`.
 
 ## Liveness - Parent:
 Let `ChangeValidatorSet(update)` be invoked. If the channel and both blockchains are forever-active, then eventually `<MatureUpdate, update>` is triggered.
@@ -138,7 +205,7 @@ Let `ChangeValidatorSet(update)` be invoked. If the channel and both blockchains
 "forever-active" means that no packet times out. That is there is an active relayer. If a validator wants liveness, then it should run a relayer.
 
 ## Liveness - Baby:
-Let `ChangeValidatorSet(update)` be invoked on the parent chain. If the channel and both blockchains are forever-active, then eventually <ValidatorSetUpdate, update> is triggered on the baby chain.
+Let `ChangeValidatorSet(update)` be invoked on the parent chain. If the channel and both blockchains are forever-active, then eventually `<ValidatorSetUpdate, update>` is triggered on the baby chain.
 
 #### Jehan's note - forever-active and UnbondingPacket
 
@@ -150,6 +217,8 @@ I don't remember all the details of how IBC works, but the following mechanisms 
 - I'm not completely familiar with IBC, but it seems like the acknowledgement packet of `ValidatorSetUpdatePacket` would be an ideal vehicle for this. If an acknowledgement packet is not received within a certain timeout, the baby chain validators are slashed to punish censorship.
 - I think the above point precludes the use of the `ValidatorSetUpdatePacket`'s IBC acknowledgement to signal that unbonding is complete on the baby chain, in cases where the baby chain's unbonding period is greater than or equal to the parent chain's unbonding period.
 - For this reason, I have defined `UnbondingPacket` for the baby chain to signal to the parent that unbonding is complete. This also seems more intuitive, as most "acknowledgement" messages in other computing contexts happen shortly after the message they are acknowledging, not weeks later.
+
+- I need to understand IBC timeouts better. If a module can trigger a timeout of a channel without using the packet acknowledgement (by checking if the packet appears in the other chain's light client state?), then this could trigger the slashing of the censoring validators. In this case the `ValidatorSetUpdatePacket` acknowledgement would still be available to trigger unbonding on the parent chain.
 
 <NOTE: the below was written with an incorrect understanding of IBC channel timeouts and acknowledgements>
 <!-- - IBC channel may time out on the parent chain if the `ValidatorSetUpdatePacket`'s acknowledgement is not received within a certain time. In "Discussion about channel abstraction", Jovan states "In the CCV protocol, the IBC channel used between parent and baby blockchains cannot ever timeout". I'm not sure if this is intended to mean that: 
