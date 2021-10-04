@@ -1,20 +1,65 @@
-# TYPES
+# Protocol
+
+This document provides the specification of the CCV protocol.
+
+# Light Client
+
+We assume that a light client (`PARENT_LIGHT_CLIENT_ON_BABY` and `BABY_LIGHT_CLIENT_ON_PARENT`) expose the following methods:
+
+- `ClientUpdate(Header header)`: void - updates the client with the header.
+
+- `ClientUpdated()`: boolean - checks whether the client is updated.
+# Data structures
 
 ```python
-type ValidatorSetChange
-
-type ValidatorSetChangePacket: {
-    "updates": Set<ValidatorSetChange>
-}
-
-type ValidatorSetChangeAck: {
-    "updates": Set<ValidatorSetChange>
-}
-
-type unbondingChanges: Set<ValidatorSetChange>
-
-type unbondingTimes: Set<(Timestamp, ValidatorSetChange)>
+type ValidatorSetUpdate
 ```
+`ValidatorSetUpdates` are produced by the parent blockchain, outside of the CCV module.
+They contain information describing a change to the parent chain's
+validator set 
+
+---
+
+```python
+type ValidatorSetChangePacket: {
+    "updates": List<ValidatorSetUpdate>
+}
+```
+`ValidatorSetChangePacket` is sent from the parent chain to the baby chain. 
+it contains an ordered list of ValidatorSetChanges
+that must be applied to the baby chain validator set
+
+---
+
+```python
+type ValidatorSetChangeAck: {
+    "updates": List<ValidatorSetUpdate>
+}
+```
+`ValidatorSetChangeAck` is sent from the baby chain to the parent chain
+to let the parent chain know that the updates were completed
+more than the baby chain's unbonding period ago. This means
+that in most cases this ack will be sent more than two weeks 
+after its corresponding ValidatorSetChangePacket.
+
+---
+
+```python
+type unbondingChanges: List<ValidatorSetUpdate>
+```
+`unbondingChanges` is a data structure on the parent chain which records the
+validator set updates that have been made and sent to the baby chain but 
+have not yet been acknowledged.
+
+---
+
+```python
+type unbondingTimes: List<(Timestamp, List(ValidatorSetUpdate))>
+```
+`unbondingTimes` is a data structure on the baby chain which records the
+currently unbonding updates and the time that they were applied.
+It is used by the baby chain to know when to send ValidatorSetChangeAcks
+to the parent chain.
 
 # Parent Chain
 
