@@ -1,25 +1,25 @@
 # TYPES
 
 ```python
-type ValidatorSetUpdate
+type ValidatorSetChange
 
-type ValidatorSetUpdatePacket: {
-    "updates": Set<ValidatorSetUpdate>
+type ValidatorSetChangePacket: {
+    "updates": Set<ValidatorSetChange>
 }
 
-type ValidatorSetUpdateAck: {
-    "updates": Set<ValidatorSetUpdate>
+type ValidatorSetChangeAck: {
+    "updates": Set<ValidatorSetChange>
 }
 
-type unbondingChanges: Set<ValidatorSetUpdate>
+type unbondingChanges: Set<ValidatorSetChange>
 
-type unbondingTimes: Set<(Timestamp, ValidatorSetUpdate)>
+type unbondingTimes: Set<(Timestamp, ValidatorSetChange)>
 ```
 
 # Parent Chain
 
 ```python
-def ChangeValidatorSet(update: ValidatorSetUpdate):
+def ChangeValidatorSet(update: ValidatorSetChange):
     pendingChanges.add(update)
 ```
 
@@ -45,7 +45,7 @@ def OnEndBlock():
     unbondingChanges.insert(pendingUpdates)
     
     # send the packet
-    packet: ValidatorSetUpdatePacket = {
+    packet: ValidatorSetChangePacket = {
         "updates": pendingUpdates
     }
     sendPacket(babyId, packet)
@@ -60,7 +60,7 @@ def OnEndBlock():
 - EndBlock method is invoked.
 
 **Expected postcondition:**
-- If `pendingChanges` is not empty, then the `ValidatorSetUpdatePacket` with the updates from `pendingChanges` is created and sent.
+- If `pendingChanges` is not empty, then the `ValidatorSetChangePacket` with the updates from `pendingChanges` is created and sent.
 - If `pendingChanges` is not empty, then `pendingChanges` are added into `unbondingChanges`.
 - If `pendingChanges` is not empty, then `pendingChanges` is emptied.
 
@@ -68,7 +68,7 @@ def OnEndBlock():
 - None
 ---
 ```python
-def OnValidatorSetUpdateAck(ack: ValidatorSetUpdateAck):
+def OnValidatorSetChangeAck(ack: ValidatorSetChangeAck):
     # unbond the stake; JOVAN: do we need to discuss this more since it is important in general, but not relevant to our problem definition
     chain.unbondStake(ack.updates)
     
@@ -83,7 +83,7 @@ def OnValidatorSetUpdateAck(ack: ValidatorSetUpdateAck):
 **Initiator:** Relayer
 
 **Expected precondition:**
-- ValidatorSetUpdateAck is received.
+- ValidatorSetChangeAck is received.
 
 **Expected postcondition:**
 - `BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated() = true`; Note that it is possible for `BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated()` to return `false`. If that is the case, then `BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdate(header)` is invoked, where header is the header of the latest height of the parent blockchain, which does ensure that the next call of `BABY_LIGHT_CLIENT_ON_PARENT.ClientUpdated()` returns true.
@@ -97,7 +97,7 @@ def OnValidatorSetUpdateAck(ack: ValidatorSetUpdateAck):
 # Baby Chain
 
 ```python
-def OnValidatorSetUpdatePacket(packet: ValidatorSetUpdatePacket):
+def OnValidatorSetChangePacket(packet: ValidatorSetChangePacket):
     # store the updates from the packet
     pendingChanges.insert(packet.updates)
 ```
@@ -121,16 +121,16 @@ def OnEndBlock():
         unbondingTimes.insert((UnbondingPeriod + chain.blockTime(), packet.updates))
 
         # update the chain's validator set
-        chain.applyValidatorSetUpdate(update)
+        chain.applyValidatorSetChange(update)
 
-        # trigger the ValidatorSetUpdate condition
-        trigger <ValidatorSetUpdate, update>
+        # trigger the ValidatorSetChange condition
+        trigger <ValidatorSetChange, update>
 
     for (unbondingTime, updates) in unbondingTimes:
         # if the change is fully unbonded
         if chain.blockTime()) >= unbondingTime:
-            # send an ValidatorSetUpdateAck to the parent chain
-            packet: ValidatorSetUpdateAck = {
+            # send an ValidatorSetChangeAck to the parent chain
+            packet: ValidatorSetChangeAck = {
                 "updates": updates
             }
             chain.sendPacket(parentId, packet)
@@ -150,10 +150,10 @@ def OnEndBlock():
 **Expected postcondition:**
 - for every update in pendingChanges
     - the chain's validator set is updated
-    - `<ValidatorSetUpdate, update>` is triggered.
+    - `<ValidatorSetChange, update>` is triggered.
     - `(unbondingTime, updates)` is added to `unbondingTimes`, where `unbondingTime = UnbondingPeriod + blockTime()`.
 - for each (unbondingTime, updates) where currentTime >= unbondingTime
-    - `ValidatorSetUpdateAck` is sent
+    - `ValidatorSetChangeAck` is sent
     - the tuple is removed from unbondingTime.
 - pendingChanges is emptied.
 
@@ -165,50 +165,74 @@ def OnEndBlock():
 `<MatureUpdate, update>` is not triggered unless `ChangeValidatorSet(update)` has been previously invoked.
 
 ### Proof:
-`<MatureUpdate, update>` is triggered once its `ValidatorSetUpdatePacket` is acknowledged with an `ValidatorSetUpdateAck`, where `update` in `packet.updates`. Hence, packet has been previously sent. Thus, `ChangeValidatorSet(update)` has been previously invoked.
+`<MatureUpdate, update>` is triggered once its `ValidatorSetChangePacket` is acknowledged with an `ValidatorSetChangeAck`, where `update` in `packet.updates`. Hence, packet has been previously sent. Thus, `ChangeValidatorSet(update)` has been previously invoked.
 
 ## Unbonding Safety: 
-If `<ValidatorSetUpdate, update>` is triggered at time `T`, then `<MatureUpdate, update>` is not triggered before `T + UnbondingPeriod`.
+If `<ValidatorSetChange, update>` is triggered at time `T`, then `<MatureUpdate, update>` is not triggered before `T + UnbondingPeriod`.
 
 ### Proof
-Let `<MatureUpdate, update>` be triggered on the parent chain at time `T`. This implies that a `ValidatorSetUpdatePacket` from the parent chain is acknowledged with an `ValidatorSetUpdateAck` from the baby chain, where `update` in `packet.updates`. Furthermore, this means that `UnbondingPeriod` has elapsed on baby chain between the time that the `ValidatorSetUpdatePacket` was received and the `ValidatorSetUpdateAck` was sent. 
+Let `<MatureUpdate, update>` be triggered on the parent chain at time `T`. This implies that a `ValidatorSetChangePacket` from the parent chain is acknowledged with an `ValidatorSetChangeAck` from the baby chain, where `update` in `packet.updates`. Furthermore, this means that `UnbondingPeriod` has elapsed on baby chain between the time that the `ValidatorSetChangePacket` was received and the `ValidatorSetChangeAck` was sent. 
 
-Once the first `OnEndBlock` on baby chain is invoked after `ValidatorSetUpdatePacket` is received, `<ValidatorSetUpdate, update>` is triggered; let this time be `T'`. Since `T'` is also the time at which packet is received by the baby blockchain, we conclude that Unbonding Safety is satisfied.
+Once the first `OnEndBlock` on baby chain is invoked after `ValidatorSetChangePacket` is received, `<ValidatorSetChange, update>` is triggered; let this time be `T'`. Since `T'` is also the time at which packet is received by the baby blockchain, we conclude that Unbonding Safety is satisfied.
 
 ## Order Preservation - Parent:
 If `<MatureUpdate, update>` is triggered before `<MatureUpdate, update'>`, then `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
 
 ### Proof:
-Let `<MatureUpdate, update>` be triggered before `<MatureUpdate, update'>`. This means that a `ValidatorSetUpdatePacket` from the parent chain is acknowledged with an `ValidatorSetUpdateAck` from the baby chain, where `update` in `ValidatorSetUpdateAck.updates`. Moreover, a `ValidatorSetUpdatePacket'` is acknowledged with an `ValidatorSetUpdateAck'`, where `update'` in `ValidatorSetUpdateAck'.updates`.
+Let `<MatureUpdate, update>` be triggered before `<MatureUpdate, update'>`. This means that a `ValidatorSetChangePacket` from the parent chain is acknowledged with an `ValidatorSetChangeAck` from the baby chain, where `update` in `ValidatorSetChangeAck.updates`. Moreover, a `ValidatorSetChangePacket'` is acknowledged with an `ValidatorSetChangeAck'`, where `update'` in `ValidatorSetChangeAck'.updates`.
 
 We consider two possible cases:
-- `ValidatorSetUpdateAck = ValidatorSetUpdateAck'`: This means that `update` comes before `update'` in `ValidatorSetUpdateAck.updates`. Hence, `pendingChanges` has update coming before `update'` (because `ValidatorSetUpdateAck` is "built" out of `pendingChanges`). Thus, `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
-- `ValidatorSetUpdateAck != ValidatorSetUpdateAck'`: This means that `ValidatorSetUpdateAck'` is sent after `ValidatorSetUpdateAck` (since `ValidatorSetUpdatePacket`s are acknowledged with `ValidatorSetUpdateAck`s in the order they were sent). Hence, `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')` because of the ordered channel.
+- `ValidatorSetChangeAck = ValidatorSetChangeAck'`: This means that `update` comes before `update'` in `ValidatorSetChangeAck.updates`. Hence, `pendingChanges` has update coming before `update'` (because `ValidatorSetChangeAck` is "built" out of `pendingChanges`). Thus, `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
+- `ValidatorSetChangeAck != ValidatorSetChangeAck'`: This means that `ValidatorSetChangeAck'` is sent after `ValidatorSetChangeAck` (since `ValidatorSetChangePacket`s are acknowledged with `ValidatorSetChangeAck`s in the order they were sent). Hence, `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')` because of the ordered channel.
 
 ## Safety - Baby:
-`<ValidatorSetUpdate, update>` is not triggered on the baby chain unless `ChangeValidatorSet(update)` has been previously invoked on the parent chain.
+`<ValidatorSetChange, update>` is not triggered on the baby chain unless `ChangeValidatorSet(update)` has been previously invoked on the parent chain.
 
 ### Proof:
-Let `<ValidatorSetUpdate, update>` be triggered. This means that `update` in `pendingChanges`. Hence, `ValidatorSetUpdatePacket` with `update` in `packet.updates` is received. Hence, `ChangeValidatorSet(update)` has been previously invoked.
+Let `<ValidatorSetChange, update>` be triggered. This means that `update` in `pendingChanges`. Hence, `ValidatorSetChangePacket` with `update` in `packet.updates` is received. Hence, `ChangeValidatorSet(update)` has been previously invoked.
 
 ## Order Preservation - Baby:
-If `<ValidatorSetUpdate, update>` is triggered before `<ValidatorSetUpdate, update'>`, then `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
+If `<ValidatorSetChange, update>` is triggered before `<ValidatorSetChange, update'>`, then `ChangeValidatorSet(update)` is invoked before `ChangeValidatorSet(update')`.
 
 ### Proof:
-Let `<ValidatorSetUpdate, update>` be triggered before `<ValidatorSetUpdate, update'>`. This means that a `ValdiatorSetUpdatePacket` is received, where `update` in `ValdiatorSetUpdatePacket.updates`. Moreover, a `ValdiatorSetUpdatePacket'` is received, where `update'` in `ValdiatorSetUpdatePacket'.updates`.
+Let `<ValidatorSetChange, update>` be triggered before `<ValidatorSetChange, update'>`. This means that a `ValidatorSetChangePacket` is received, where `update` in `ValidatorSetChangePacket.updates`. Moreover, a `ValidatorSetChangePacket'` is received, where `update'` in `ValidatorSetChangePacket'.updates`.
+
+We consider two possible cases:
+- `ValidatorSetChangePacket = ValidatorSetChangePacket'`: This means that `update` comes before `update'` in `ValidatorSetChangePacket.updates`. Thus, `<ValidatorSetChange, update>` is invoked before `<ValidatorSetChange, update'>`.
+- `ValidatorSetChangePacket != ValidatorSetChangePacket'`: This means that `packet'` is sent after `packet` (since packets are received in the order they were sent). Hence, `<ValidatorSetChange, update>` is invoked before `<ValidatorSetChange, update'>` because of the ordered channel.
 
 ## Liveness - Parent:
 Let `ChangeValidatorSet(update)` be invoked. If the channel and both blockchains are forever-active, then eventually `<MatureUpdate, update>` is triggered.
 
 > "forever-active" means that no packet times out. That is there is an active relayer. If a validator wants liveness, then it should run a relayer.
 
+### Proof:
+Let `ChangeValidatorSet(update)` be invoked.
+
+Since the channel is forever-active, `update` is eventually received on the baby blockchain.
+At that point, the packet is added to `unbondingTimes`.
+
+Because of the fact that the baby blockchain is also forever-active, the `UnbondingPeriod` eventually elapses and the packet is acknowledged.
+
+Thus, `<MatureUpdate, update>` is eventually triggered.
+
 ## Liveness - Baby:
-Let `ChangeValidatorSet(update)` be invoked on the parent chain. If the channel and both blockchains are forever-active, then eventually `<ValidatorSetUpdate, update>` is triggered on the baby chain.
+Let `ChangeValidatorSet(update)` be invoked on the parent chain. If the channel and both blockchains are forever-active, then eventually `<ValidatorSetChange, update>` is triggered on the baby chain.
 
-#### Jehan's note - forever-active and ValidatorSetUpdateAck
+### Proof:
+Let `ChangeValidatorSet(update)` be invoked.
 
-This definition of forever-active needs to be looked at closely. If validators on the baby chain can censor the `ValidatorSetUpdatePacket` indefinitely, then they can keep control of the baby chain with few consequences.
+Since the channel and the baby blockchain is forever-active, `update` is eventually received on the baby blockchain.
+
+Hence, it is added to `pendingChanges`.
+
+Once `EndBlock()` is invoked, `<ValidatorSetUpdate, update>` is triggered.
+
+
+<!-- #### Jehan's note - forever-active and ValidatorSetChangeAck
+
+This definition of forever-active needs to be looked at closely. If validators on the baby chain can censor the `ValidatorSetChangePacket` indefinitely, then they can keep control of the baby chain with few consequences.
 I don't remember all the details of how IBC works, but the following mechanisms may prevent it from happening:
 
-- If the baby chain validators censor the `ValidatorSetUpdatePacket`, it will be impossible for the baby chain validators to ever unstake their tokens, since `<MatureUpdate, update>` will never be triggered. Presumably these staked tokens can continue to generate staking rewards though, so this is not a full deterrent.
-- There must be a timeout of some kind after which the baby chain validators get punished on the parent chain if a `ValidatorSetUpdatePacket` never appears on the baby chain. This timeout must be shorter than the parent chain unbonding period.
+- If the baby chain validators censor the `ValidatorSetChangePacket`, it will be impossible for the baby chain validators to ever unstake their tokens, since `<MatureUpdate, update>` will never be triggered. Presumably these staked tokens can continue to generate staking rewards though, so this is not a full deterrent.
+- There must be a timeout of some kind after which the baby chain validators get punished on the parent chain if a `ValidatorSetChangePacket` never appears on the baby chain. This timeout must be shorter than the parent chain unbonding period. -->
