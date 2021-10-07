@@ -80,7 +80,6 @@ def ChangeValidatorSet(update: ValidatorSetChange):
 - None.
 ---
 ```python
-# NOTE: How does this work with epochs?
 def OnEndBlock():
     # if pendingUpdates is empty, do nothing
     if pendingUpdates.isEmpty():
@@ -145,6 +144,9 @@ def OnValidatorSetChangeAck(ack: ValidatorSetChangeAck):
 def OnValidatorSetChangePacket(packet: ValidatorSetChangePacket):
     # store the updates from the packet
     pendingChanges.insert(packet.updates)
+
+    # calculate and store the unbonding time for the packet in unbondingTimes
+    unbondingTimes.insert((UnbondingPeriod + chain.blockTime(), packet.updates))
 ```
 
 **Initiator:** Relayer
@@ -155,6 +157,7 @@ def OnValidatorSetChangePacket(packet: ValidatorSetChangePacket):
 
 **Expected postcondition:**
 - `packet.updates` are added to `pendingChanges`.
+- `(unbondingTime, updates)` is added to `unbondingTimes`, where `unbondingTime = UnbondingPeriod + blockTime()`.
 
 **Error condition:**
 - If the precondition is violated.
@@ -162,9 +165,6 @@ def OnValidatorSetChangePacket(packet: ValidatorSetChangePacket):
 ```python
 def OnEndBlock():
     for update in pendingChanges:
-        # calculate and store the unbonding time for the packet in unbondingTimes
-        unbondingTimes.insert((UnbondingPeriod + chain.blockTime(), packet.updates))
-
         # update the chain's validator set
         chain.applyValidatorSetChange(update)
 
@@ -196,7 +196,6 @@ def OnEndBlock():
 - for every update in pendingChanges
     - the chain's validator set is updated
     - `<ValidatorSetChange, update>` is triggered.
-    - `(unbondingTime, updates)` is added to `unbondingTimes`, where `unbondingTime = UnbondingPeriod + blockTime()`.
 - for each (unbondingTime, updates) where currentTime >= unbondingTime
     - `ValidatorSetChangeAck` is sent
     - the tuple is removed from unbondingTime.
